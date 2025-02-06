@@ -56,7 +56,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     m = folium.Map(location=[32, 53], zoom_start=5)
     
     # Changed color scheme to red spectrum
-    fill_color = 'RdYlGn_r' if not reverse_colors else 'RdYlGn'
+    fill_color = 'Reds_r' if reverse_colors else 'Reds'
     
     choropleth = folium.Choropleth(
         geo_data=merged_gdf.to_json(),
@@ -130,6 +130,27 @@ def main():
     )
     
     reverse_colors = st.sidebar.checkbox("Reverse Colors")
+    
+    # Add info box above the map
+    st.markdown("""
+        <style>
+        .info-box {
+            padding: 15px;
+            background-color: #f0f2f6;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    with st.container():
+        st.markdown(f"""
+        <div class="info-box">
+            <h3>Currently Viewing:</h3>
+            <p><strong>Indicator:</strong> {selected_index_code} - {sheet_options[selected_index_code]}</p>
+            <p><strong>Year:</strong> {year}</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Create and display map
     try:
