@@ -56,7 +56,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     m = folium.Map(location=[32, 53], zoom_start=5)
     
     # Changed color scheme to red spectrum
-    fill_color = 'Reds_r' if reverse_colors else 'Reds'
+    fill_color = 'RdYlGn_r' if not reverse_colors else 'RdYlGn'
     
     choropleth = folium.Choropleth(
         geo_data=merged_gdf.to_json(),
