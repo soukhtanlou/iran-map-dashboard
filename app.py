@@ -77,18 +77,56 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     years = list(national_averages.keys())
     fig = go.Figure()
 
+    # National Average line with markers
     fig.add_trace(go.Scatter(
-        x=years, y=[national_averages[year] for year in years],
-        name='National Average', line=dict(color='blue', width=2)
+        x=years,
+        y=[national_averages[year] for year in years],
+        name='National Average',
+        line=dict(color='#1f77b4', width=2.5),  # Modern blue
+        mode='lines+markers',
+        marker=dict(size=8, symbol='circle'),
+        hovertemplate='%{y:.2f}<extra></extra>'  # Cleaner hover info
     ))
 
+    # Province line with markers (if provided)
     if province_data and province_name:
         fig.add_trace(go.Scatter(
-            x=years, y=[province_data[year] for year in years],
-            name=province_name, line=dict(color='red', width=2)
+            x=years,
+            y=[province_data[year] for year in years],
+            name=province_name,
+            line=dict(color='#ff7f0e', width=2.5, dash='dash'),  # Orange, dashed for contrast
+            mode='lines+markers',
+            marker=dict(size=8, symbol='circle'),
+            hovertemplate='%{y:.2f}<extra></extra>'
         ))
 
-    fig.update_layout(title='Trend Over Years', xaxis_title='Year', yaxis_title='Value', hovermode='x unified', height=400)
+    # Customize layout
+    fig.update_layout(
+        title='Trend Over Years',
+        xaxis_title='Year',
+        yaxis_title='Value',
+        hovermode='x unified',
+        height=400,
+        plot_bgcolor='rgba(245, 245, 245, 1)',  # Pale gray background
+        paper_bgcolor='white',
+        font=dict(size=12),
+        xaxis=dict(
+            tickvals=years,  # Only show full years
+            ticktext=[str(year) for year in years],
+            gridcolor='rgba(200, 200, 200, 0.5)'  # Subtle gridlines
+        ),
+        yaxis=dict(
+            gridcolor='rgba(200, 200, 200, 0.5)'  # Subtle gridlines
+        ),
+        legend=dict(
+            x=1.05,
+            y=1,
+            bgcolor='rgba(255, 255, 255, 0.8)',
+            bordercolor='gray',
+            borderwidth=1
+        )
+    )
+
     return fig
 
 def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id=None):
@@ -96,10 +134,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     df = excel_file.parse(sheet)
     merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
 
-    # Prepare data for choropleth
     choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
-
-    # Calculate centroids for tooltips
     merged_gdf['centroid'] = merged_gdf.geometry.centroid
     merged_gdf['lat'] = merged_gdf['centroid'].y
     merged_gdf['lon'] = merged_gdf['centroid'].x
@@ -107,7 +142,6 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')
     fill_color = 'Reds_r' if reverse_colors else 'Reds'
 
-    # Choropleth layer
     folium.Choropleth(
         geo_data=choropleth_gdf.to_json(), name='choropleth',
         data=choropleth_gdf, columns=['ID_1', year],
@@ -116,7 +150,6 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         legend_name=f'{selected_index_code} - {year}'
     ).add_to(m)
 
-    # Tooltip layer with province info
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year]].copy()
     if not tooltip_gdf.empty:
         geojson_str = tooltip_gdf.to_json()
@@ -145,7 +178,6 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     else:
         st.warning("No data available for tooltips.")
 
-    # Outline for selected province
     if selected_province_id:
         selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
         if not selected_gdf.empty:
@@ -175,7 +207,6 @@ def main():
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
     st.title("Geographic Development Index Dashboard - Education Sector")
 
-    # Apply custom CSS
     st.markdown(custom_css, unsafe_allow_html=True)
 
     uploaded_geojson = st.file_uploader("Upload GeoJSON file", type=['json'])
@@ -202,25 +233,20 @@ def main():
     year = st.sidebar.selectbox("Select Year:", options=['2019', '2020', '2021', '2022', '2023'])
     reverse_colors = st.sidebar.checkbox("Reverse Colors")
 
-    # Initialize session state for selected province
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
-    # Create map directly (no caching)
     m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
 
-    # Display map in a framed container
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
     map_data = st_folium(m, width=1200, height=600, key=f"folium_map_{selected_index_code}_{year}")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Explanatory text
     st.markdown("**Click on a region on the map to display its trend over years in the chart below.**")
 
     years = ['2019', '2020', '2021', '2022', '2023']
     national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
 
-    # Handle click event
     if map_data['last_clicked']:
         province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
         if province_id and province_id != st.session_state.selected_province_id:
@@ -232,7 +258,6 @@ def main():
                 st.session_state.selected_province_id = None
                 st.rerun()
 
-    # Display line chart based on selected province
     if st.session_state.selected_province_id:
         province_name = location_dict.get(st.session_state.selected_province_id, "Unknown")
         province_data = get_province_data(excel_file, sheet_options[selected_index_code], st.session_state.selected_province_id, years)
