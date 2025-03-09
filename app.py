@@ -14,27 +14,27 @@ import json
 custom_css = """
 <style>
     body {
-        background-color: #f5f5f5;  /* Pale gray background */
+        background-color: #f5f5f5;
     }
     .map-frame {
-        border: 2px solid #cccccc;  /* Light gray border */
+        border: 2px solid #cccccc;
         border-radius: 5px;
         padding: 10px;
-        background-color: #ffffff;  /* White background for map frame */
-        width: 100%;  /* Full width of container */
-        max-width: 100%;  /* Prevent overflow */
-        overflow-x: hidden;  /* No horizontal scroll */
+        background-color: #ffffff;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
     }
     .folium-legend {
         position: absolute !important;
         top: 10px !important;
         right: 10px !important;
         background-color: rgba(255, 255, 255, 0.8) !important;
-        z-index: 1000 !important;  /* Ensure it stays on top */
+        z-index: 1000 !important;
     }
     .stApp {
-        max-width: 100%;  /* Ensure app fits screen */
-        overflow-x: hidden;  /* Prevent app-wide horizontal scroll */
+        max-width: 100%;
+        overflow-x: hidden;
     }
 </style>
 """
@@ -155,7 +155,8 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         legend_name=f'{selected_index_code} - {year}'
     ).add_to(m)
 
-    tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year]].copy()
+    # Tooltip layer with geometry included
+    tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year, 'geometry']].copy()
     if not tooltip_gdf.empty:
         geojson_str = tooltip_gdf.to_json()
         try:
@@ -177,11 +178,11 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
                     name='Tooltips'
                 ).add_to(m)
             else:
-                st.warning("Tooltip GeoJSON is not a FeatureCollection.")
-        except json.JSONDecodeError:
-            st.error("Failed to parse GeoJSON for tooltips.")
+                st.error(f"Tooltip GeoJSON is not a FeatureCollection. Type found: {geojson_data.get('type')}")
+        except json.JSONDecodeError as e:
+            st.error(f"Failed to parse GeoJSON for tooltips: {str(e)}")
     else:
-        st.warning("No data available for tooltips.")
+        st.warning("Tooltip GeoDataFrame is empty.")
 
     if selected_province_id:
         selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
@@ -220,61 +221,3 @@ def main():
     if not (uploaded_geojson and uploaded_excel):
         st.warning("Please upload both the GeoJSON and Excel files to continue.")
         st.stop()
-
-    with open('IRN_adm.json', 'wb') as f:
-        f.write(uploaded_geojson.getvalue())
-    with open('IrDevIndextest.xlsx', 'wb') as f:
-        f.write(uploaded_excel.getvalue())
-
-    try:
-        gdf, excel_file, sheet_options, location_dict = load_data()
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return
-
-    st.sidebar.header("Dashboard Controls")
-    selected_index_code = st.sidebar.selectbox("Select Indicator:", options=list(sheet_options.keys()),
-                                               format_func=lambda x: f"{x} - {sheet_options[x]}")
-    year = st.sidebar.selectbox("Select Year:", options=['2019', '2020', '2021', '2022', '2023'])
-    reverse_colors = st.sidebar.checkbox("Reverse Colors")
-
-    if 'selected_province_id' not in st.session_state:
-        st.session_state.selected_province_id = None
-
-    m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
-
-    # Use container width for responsiveness
-    st.markdown('<div class="map-frame">', unsafe_allow_html=True)
-    map_data = st_folium(m, width=None, height=600)  # Remove fixed width, let it scale
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("**Click on a region on the map to display its trend over years in the chart below.**")
-
-    years = ['2019', '2020', '2021', '2022', '2023']
-    national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
-
-    if map_data['last_clicked']:
-        province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
-        if province_id and province_id != st.session_state.selected_province_id:
-            st.session_state.selected_province_id = province_id
-            st.rerun()
-        elif not province_id:
-            st.warning("Could not identify the selected province.")
-            if st.session_state.selected_province_id is not None:
-                st.session_state.selected_province_id = None
-                st.rerun()
-
-    if st.session_state.selected_province_id:
-        province_name = location_dict.get(st.session_state.selected_province_id, "Unknown")
-        province_data = get_province_data(excel_file, sheet_options[selected_index_code], st.session_state.selected_province_id, years)
-        if province_data:
-            fig = create_line_chart(national_averages, province_data, province_name)
-            st.plotly_chart(fig, use_container_width=True)  # Responsive chart width
-        else:
-            st.warning("No data found for the selected province.")
-    else:
-        fig = create_line_chart(national_averages)
-        st.plotly_chart(fig, use_container_width=True)  # Responsive chart width
-
-if __name__ == "__main__":
-    main()
