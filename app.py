@@ -138,51 +138,41 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     try:
         sheet = sheet_options[selected_index_code]
         df = excel_file.parse(sheet)
-
-        # Merge GeoDataFrame with Excel data on 'ID_1'
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
     except Exception as e:
         st.error(f"Error merging GeoDataFrame with Excel data: {e}")
         return None, None
 
     try:
-        # Ensure centroids are calculated only if they are missing
-        if 'centroid' not in merged_gdf.columns:
-            merged_gdf['centroid'] = merged_gdf.geometry.centroid
-        if 'lat' not in merged_gdf.columns or 'lon' not in merged_gdf.columns:
-            merged_gdf['lat'] = merged_gdf['centroid'].y
-            merged_gdf['lon'] = merged_gdf['centroid'].x
+        choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
+        merged_gdf['centroid'] = merged_gdf.geometry.centroid
+        merged_gdf['lat'] = merged_gdf['centroid'].y
+        merged_gdf['lon'] = merged_gdf['centroid'].x
     except Exception as e:
         st.error(f"Error processing centroids: {e}")
         return None, None
 
-    # Create folium map
     m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')
     fill_color = 'Reds_r' if reverse_colors else 'Reds'
 
     try:
-        # Create choropleth layer
         folium.Choropleth(
-            geo_data=merged_gdf.to_json(),
-            name='choropleth',
-            data=merged_gdf,
-            columns=['ID_1', year],
-            key_on='feature.properties.ID_1',
-            fill_color=fill_color,
-            fill_opacity=0.8,
-            line_opacity=0.2,
+            geo_data=choropleth_gdf.to_json(), name='choropleth',
+            data=choropleth_gdf, columns=['ID_1', year],
+            key_on='feature.properties.ID_1', fill_color=fill_color,
+            fill_opacity=0.8, line_opacity=0.2,
             legend_name=f'{selected_index_code} - {year}'
         ).add_to(m)
     except Exception as e:
         st.error(f"Error creating choropleth layer: {e}")
         return m, merged_gdf
 
-    # Create tooltip layer
+    # Tooltip layer
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', year, 'geometry']].copy()
     if not tooltip_gdf.empty and tooltip_gdf['geometry'].notna().any():
         try:
-            geojson_data = json.loads(tooltip_gdf.to_json())  # Convert DataFrame to GeoJSON format
-
+            geojson_str = tooltip_gdf.to_json()
+            geojson_data = json.loads(geojson_str)
             if geojson_data.get("type") == "FeatureCollection":
                 folium.GeoJson(
                     geojson_data,
@@ -201,17 +191,20 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
                     name='Tooltips'
                 ).add_to(m)
             else:
-                st.error(f"Tooltip GeoJSON is not a FeatureCollection.")
+                st.error(f"Tooltip GeoJSON is not a FeatureCollection. Type: {geojson_data.get('type')}")
         except json.JSONDecodeError as e:
             st.error(f"Failed to parse GeoJSON for tooltips: {str(e)}")
         except Exception as e:
             st.error(f"Error adding tooltip layer: {e}")
+    else:
+        st.warning("Tooltip GeoDataFrame is empty or has no valid geometries.")
 
-    # Add selected province outline
+    # Selected province outline
     if selected_province_id:
         try:
             selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
             if not selected_gdf.empty:
+                selected_gdf = selected_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
                 folium.GeoJson(
                     selected_gdf.to_json(),
                     style_function=lambda x: {
@@ -225,11 +218,8 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         except Exception as e:
             st.error(f"Error adding selected province outline: {e}")
 
-    # Add map controls
     folium.LayerControl().add_to(m)
-    
     return m, merged_gdf
-
 
 def find_clicked_province(clicked_location, gdf):
     click_point = Point(clicked_location['lng'], clicked_location['lat'])
