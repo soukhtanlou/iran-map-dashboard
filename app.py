@@ -8,6 +8,7 @@ from streamlit_folium import st_folium
 import os
 import plotly.graph_objects as go
 from shapely.geometry import Point
+import json
 
 # Custom CSS for paler background, map framework, and legend positioning
 custom_css = """
@@ -117,34 +118,48 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
 
     # Tooltip layer with province info
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year]].copy()
-    folium.GeoJson(
-        tooltip_gdf.to_json(),
-        style_function=lambda x: {
-            'fillColor': 'none',
-            'color': 'none',
-            'weight': 0,
-            'fillOpacity': 0
-        },
-        tooltip=folium.GeoJsonTooltip(
-            fields=['NAME_1', 'lat', 'lon', year],
-            aliases=['Province:', 'Latitude:', 'Longitude:', f'{selected_index_code} ({year}):'],
-            localize=True
-        )
-    ).add_to(m)
+    if not tooltip_gdf.empty:
+        # Convert to GeoJSON and check validity
+        geojson_str = tooltip_gdf.to_json()
+        try:
+            geojson_data = json.loads(geojson_str)
+            if geojson_data.get("type") == "FeatureCollection":
+                folium.GeoJson(
+                    geojson_data,  # Pass parsed dictionary instead of string
+                    style_function=lambda x: {
+                        'fillColor': 'none',
+                        'color': 'none',
+                        'weight': 0,
+                        'fillOpacity': 0
+                    },
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=['NAME_1', 'lat', 'lon', year],
+                        aliases=['Province:', 'Latitude:', 'Longitude:', f'{selected_index_code} ({year}):'],
+                        localize=True
+                    ),
+                    name='Tooltips'
+                ).add_to(m)
+            else:
+                st.warning("Tooltip GeoJSON is not a FeatureCollection.")
+        except json.JSONDecodeError:
+            st.error("Failed to parse GeoJSON for tooltips.")
+    else:
+        st.warning("No data available for tooltips.")
 
     # Outline for selected province
     if selected_province_id:
         selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
-        folium.GeoJson(
-            selected_gdf.to_json(),
-            style_function=lambda x: {
-                'fillColor': 'none',
-                'color': 'black',
-                'weight': 3,
-                'fillOpacity': 0
-            },
-            name='Selected Province'
-        ).add_to(m)
+        if not selected_gdf.empty:
+            folium.GeoJson(
+                selected_gdf.to_json(),
+                style_function=lambda x: {
+                    'fillColor': 'none',
+                    'color': 'black',
+                    'weight': 3,
+                    'fillOpacity': 0
+                },
+                name='Selected Province'
+            ).add_to(m)
 
     folium.LayerControl().add_to(m)
     return m, merged_gdf
