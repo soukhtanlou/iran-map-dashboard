@@ -139,6 +139,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         sheet = sheet_options[selected_index_code]
         df = excel_file.parse(sheet)
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
+        st.write(f"merged_gdf shape: {merged_gdf.shape}")  # Debug: Check merged data
     except Exception as e:
         st.error(f"Error merging GeoDataFrame with Excel data: {e}")
         return None, None
@@ -167,28 +168,33 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         st.error(f"Error creating choropleth layer: {e}")
         return m, merged_gdf
 
-    # Tooltip layer with simplified fields
+    # Tooltip layer with debugging
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', year, 'geometry']].copy()
-    if not tooltip_gdf.empty:
+    st.write(f"tooltip_gdf shape: {tooltip_gdf.shape}")  # Debug: Check tooltip data
+    st.write(f"tooltip_gdf sample:\n{tooltip_gdf.head()}")  # Debug: Inspect first few rows
+    if not tooltip_gdf.empty and tooltip_gdf['geometry'].notna().any():
         try:
             geojson_str = tooltip_gdf.to_json()
             geojson_data = json.loads(geojson_str)
+            st.write(f"GeoJSON type: {geojson_data.get('type')}")  # Debug: Verify GeoJSON type
             if geojson_data.get("type") == "FeatureCollection":
                 folium.GeoJson(
                     geojson_data,
                     style_function=lambda x: {
-                        'fillColor': 'none',
+                        'fillColor': 'transparent',  # Ensure visibility
                         'color': 'none',
                         'weight': 0,
                         'fillOpacity': 0
                     },
                     tooltip=folium.GeoJsonTooltip(
-                        fields=['NAME_1', year],  # Only province name and indicator value
+                        fields=['NAME_1', year],
                         aliases=['Province:', f'{selected_index_code} ({year}):'],
-                        localize=True
+                        localize=True,
+                        style=("background-color: white; color: #333333; font-family: arial; font-size: 12px; padding: 10px;")
                     ),
                     name='Tooltips'
                 ).add_to(m)
+                st.success("Tooltip layer added successfully.")  # Confirm execution
             else:
                 st.error(f"Tooltip GeoJSON is not a FeatureCollection. Type: {geojson_data.get('type')}")
                 st.write("Tooltip GeoJSON sample:", geojson_data)
@@ -198,7 +204,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         except Exception as e:
             st.error(f"Error adding tooltip layer: {e}")
     else:
-        st.warning("Tooltip GeoDataFrame is empty.")
+        st.warning("Tooltip GeoDataFrame is empty or has no valid geometries.")
 
     if selected_province_id:
         try:
