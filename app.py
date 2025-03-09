@@ -96,7 +96,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     df = excel_file.parse(sheet)
     merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
 
-    # Prepare data for choropleth (drop non-serializable columns)
+    # Prepare data for choropleth
     choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
 
     # Calculate centroids for tooltips
@@ -145,11 +145,10 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     else:
         st.warning("No data available for tooltips.")
 
-    # Outline for selected province
+    # Outline for selected province (optimized)
     if selected_province_id:
         selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
         if not selected_gdf.empty:
-            # Drop non-serializable columns for outline layer
             selected_gdf = selected_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
             folium.GeoJson(
                 selected_gdf.to_json(),
@@ -207,8 +206,12 @@ def main():
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
-    # Create map with current selected province
-    m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
+    # Create and cache map to reduce redraw time
+    @st.cache_data(show=True)
+    def cached_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id):
+        return create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id)
+
+    m, merged_gdf = cached_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
 
     # Display map in a framed container
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
@@ -224,18 +227,25 @@ def main():
     # Handle click event
     if map_data['last_clicked']:
         province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
-        if province_id:
+        if province_id and province_id != st.session_state.selected_province_id:
             st.session_state.selected_province_id = province_id
-            province_name = location_dict.get(province_id, "Unknown")
-            province_data = get_province_data(excel_file, sheet_options[selected_index_code], province_id, years)
-            if province_data:
-                fig = create_line_chart(national_averages, province_data, province_name)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("No data found for the selected province.")
-        else:
+            # Rerun to update map with outline
+            st.rerun()
+        elif not province_id:
             st.warning("Could not identify the selected province.")
-            st.session_state.selected_province_id = None
+            if st.session_state.selected_province_id is not None:
+                st.session_state.selected_province_id = None
+                st.rerun()
+
+    # Display line chart based on selected province
+    if st.session_state.selected_province_id:
+        province_name = location_dict.get(st.session_state.selected_province_id, "Unknown")
+        province_data = get_province_data(excel_file, sheet_options[selected_index_code], st.session_state.selected_province_id, years)
+        if province_data:
+            fig = create_line_chart(national_averages, province_data, province_name)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No data found for the selected province.")
     else:
         fig = create_line_chart(national_averages)
         st.plotly_chart(fig, use_container_width=True)
