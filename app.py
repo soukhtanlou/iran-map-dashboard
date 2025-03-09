@@ -119,13 +119,12 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     # Tooltip layer with province info
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year]].copy()
     if not tooltip_gdf.empty:
-        # Convert to GeoJSON and check validity
         geojson_str = tooltip_gdf.to_json()
         try:
             geojson_data = json.loads(geojson_str)
             if geojson_data.get("type") == "FeatureCollection":
                 folium.GeoJson(
-                    geojson_data,  # Pass parsed dictionary instead of string
+                    geojson_data,
                     style_function=lambda x: {
                         'fillColor': 'none',
                         'color': 'none',
@@ -150,6 +149,8 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     if selected_province_id:
         selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
         if not selected_gdf.empty:
+            # Drop non-serializable columns for outline layer
+            selected_gdf = selected_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
             folium.GeoJson(
                 selected_gdf.to_json(),
                 style_function=lambda x: {
