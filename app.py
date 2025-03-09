@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from shapely.geometry import Point
 import json
 
-# Custom CSS for paler background, map framework, and legend positioning
+# Custom CSS for responsive layout
 custom_css = """
 <style>
     body {
@@ -21,12 +21,20 @@ custom_css = """
         border-radius: 5px;
         padding: 10px;
         background-color: #ffffff;  /* White background for map frame */
+        width: 100%;  /* Full width of container */
+        max-width: 100%;  /* Prevent overflow */
+        overflow-x: hidden;  /* No horizontal scroll */
     }
     .folium-legend {
         position: absolute !important;
         top: 10px !important;
         right: 10px !important;
         background-color: rgba(255, 255, 255, 0.8) !important;
+        z-index: 1000 !important;  /* Ensure it stays on top */
+    }
+    .stApp {
+        max-width: 100%;  /* Ensure app fits screen */
+        overflow-x: hidden;  /* Prevent app-wide horizontal scroll */
     }
 </style>
 """
@@ -77,46 +85,43 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     years = list(national_averages.keys())
     fig = go.Figure()
 
-    # National Average line with markers
     fig.add_trace(go.Scatter(
         x=years,
         y=[national_averages[year] for year in years],
         name='National Average',
-        line=dict(color='#1f77b4', width=2.5),  # Modern blue
+        line=dict(color='#1f77b4', width=2.5),
         mode='lines+markers',
         marker=dict(size=8, symbol='circle'),
-        hovertemplate='%{y:.2f}<extra></extra>'  # Cleaner hover info
+        hovertemplate='%{y:.2f}<extra></extra>'
     ))
 
-    # Province line with markers (if provided)
     if province_data and province_name:
         fig.add_trace(go.Scatter(
             x=years,
             y=[province_data[year] for year in years],
             name=province_name,
-            line=dict(color='#ff7f0e', width=2.5, dash='dash'),  # Orange, dashed for contrast
+            line=dict(color='#ff7f0e', width=2.5, dash='dash'),
             mode='lines+markers',
             marker=dict(size=8, symbol='circle'),
             hovertemplate='%{y:.2f}<extra></extra>'
         ))
 
-    # Customize layout
     fig.update_layout(
         title='Trend Over Years',
         xaxis_title='Year',
         yaxis_title='Value',
         hovermode='x unified',
         height=400,
-        plot_bgcolor='rgba(245, 245, 245, 1)',  # Pale gray background
+        plot_bgcolor='rgba(245, 245, 245, 1)',
         paper_bgcolor='white',
         font=dict(size=12),
         xaxis=dict(
-            tickvals=years,  # Only show full years
+            tickvals=years,
             ticktext=[str(year) for year in years],
-            gridcolor='rgba(200, 200, 200, 0.5)'  # Subtle gridlines
+            gridcolor='rgba(200, 200, 200, 0.5)'
         ),
         yaxis=dict(
-            gridcolor='rgba(200, 200, 200, 0.5)'  # Subtle gridlines
+            gridcolor='rgba(200, 200, 200, 0.5)'
         ),
         legend=dict(
             x=1.05,
@@ -140,8 +145,8 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     merged_gdf['lon'] = merged_gdf['centroid'].x
 
     m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')
-    fill_color = 'Reds_r' if reverse_colors else 'Reds'
 
+    fill_color = 'Reds_r' if reverse_colors else 'Reds'
     folium.Choropleth(
         geo_data=choropleth_gdf.to_json(), name='choropleth',
         data=choropleth_gdf, columns=['ID_1', year],
@@ -238,8 +243,9 @@ def main():
 
     m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
 
+    # Use container width for responsiveness
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
-    map_data = st_folium(m, width=1200, height=600, key=f"folium_map_{selected_index_code}_{year}")
+    map_data = st_folium(m, width=None, height=600)  # Remove fixed width, let it scale
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("**Click on a region on the map to display its trend over years in the chart below.**")
@@ -263,12 +269,12 @@ def main():
         province_data = get_province_data(excel_file, sheet_options[selected_index_code], st.session_state.selected_province_id, years)
         if province_data:
             fig = create_line_chart(national_averages, province_data, province_name)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)  # Responsive chart width
         else:
             st.warning("No data found for the selected province.")
     else:
         fig = create_line_chart(national_averages)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)  # Responsive chart width
 
 if __name__ == "__main__":
     main()
