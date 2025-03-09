@@ -145,7 +145,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     else:
         st.warning("No data available for tooltips.")
 
-    # Outline for selected province (optimized)
+    # Outline for selected province
     if selected_province_id:
         selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
         if not selected_gdf.empty:
@@ -206,12 +206,8 @@ def main():
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
-    # Create and cache map to reduce redraw time
-    @st.cache_data(show=True)
-    def cached_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id):
-        return create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id)
-
-    m, merged_gdf = cached_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
+    # Create map directly (no caching)
+    m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
 
     # Display map in a framed container
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
@@ -229,7 +225,6 @@ def main():
         province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
         if province_id and province_id != st.session_state.selected_province_id:
             st.session_state.selected_province_id = province_id
-            # Rerun to update map with outline
             st.rerun()
         elif not province_id:
             st.warning("Could not identify the selected province.")
