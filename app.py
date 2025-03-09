@@ -14,27 +14,27 @@ import json
 custom_css = """
 <style>
     body {
-        background-color: #f5f5f5;  /* Pale gray background */
+        background-color: #f5f5f5;
     }
     .map-frame {
-        border: 2px solid #cccccc;  /* Light gray border */
+        border: 2px solid #cccccc;
         border-radius: 5px;
         padding: 10px;
-        background-color: #ffffff;  /* White background for map frame */
-        width: 100%;  /* Full width of container */
-        max-width: 100%;  /* Prevent overflow */
-        overflow-x: hidden;  /* No horizontal scroll */
+        background-color: #ffffff;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
     }
     .folium-legend {
         position: absolute !important;
         top: 10px !important;
         right: 10px !important;
         background-color: rgba(255, 255, 255, 0.8) !important;
-        z-index: 1000 !important;  /* Ensure it stays on top */
+        z-index: 1000 !important;
     }
     .stApp {
-        max-width: 100%;  /* Ensure app fits screen */
-        overflow-x: hidden;  /* Prevent app-wide horizontal scroll */
+        max-width: 100%;
+        overflow-x: hidden;
     }
 </style>
 """
@@ -135,30 +135,43 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     return fig
 
 def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id=None):
-    sheet = sheet_options[selected_index_code]
-    df = excel_file.parse(sheet)
-    merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
+    try:
+        sheet = sheet_options[selected_index_code]
+        df = excel_file.parse(sheet)
+        merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
+    except Exception as e:
+        st.error(f"Error merging GeoDataFrame with Excel data: {e}")
+        return None, None
 
-    choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
-    merged_gdf['centroid'] = merged_gdf.geometry.centroid
-    merged_gdf['lat'] = merged_gdf['centroid'].y
-    merged_gdf['lon'] = merged_gdf['centroid'].x
+    try:
+        choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
+        merged_gdf['centroid'] = merged_gdf.geometry.centroid
+        merged_gdf['lat'] = merged_gdf['centroid'].y
+        merged_gdf['lon'] = merged_gdf['centroid'].x
+    except Exception as e:
+        st.error(f"Error processing centroids: {e}")
+        return None, None
 
     m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')
-
     fill_color = 'Reds_r' if reverse_colors else 'Reds'
-    folium.Choropleth(
-        geo_data=choropleth_gdf.to_json(), name='choropleth',
-        data=choropleth_gdf, columns=['ID_1', year],
-        key_on='feature.properties.ID_1', fill_color=fill_color,
-        fill_opacity=0.8, line_opacity=0.2,
-        legend_name=f'{selected_index_code} - {year}'
-    ).add_to(m)
 
-    tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year]].copy()
+    try:
+        folium.Choropleth(
+            geo_data=choropleth_gdf.to_json(), name='choropleth',
+            data=choropleth_gdf, columns=['ID_1', year],
+            key_on='feature.properties.ID_1', fill_color=fill_color,
+            fill_opacity=0.8, line_opacity=0.2,
+            legend_name=f'{selected_index_code} - {year}'
+        ).add_to(m)
+    except Exception as e:
+        st.error(f"Error creating choropleth layer: {e}")
+        return m, merged_gdf
+
+    # Tooltip layer with debugging
+    tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year, 'geometry']].copy()
     if not tooltip_gdf.empty:
-        geojson_str = tooltip_gdf.to_json()
         try:
+            geojson_str = tooltip_gdf.to_json()
             geojson_data = json.loads(geojson_str)
             if geojson_data.get("type") == "FeatureCollection":
                 folium.GeoJson(
@@ -177,26 +190,33 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
                     name='Tooltips'
                 ).add_to(m)
             else:
-                st.warning("Tooltip GeoJSON is not a FeatureCollection.")
-        except json.JSONDecodeError:
-            st.error("Failed to parse GeoJSON for tooltips.")
+                st.error(f"Tooltip GeoJSON is not a FeatureCollection. Type: {geojson_data.get('type')}")
+                st.write("Tooltip GeoJSON sample:", geojson_data)  # Debug output
+        except json.JSONDecodeError as e:
+            st.error(f"Failed to parse GeoJSON for tooltips: {str(e)}")
+            st.write("Raw GeoJSON string:", geojson_str)  # Debug output
+        except Exception as e:
+            st.error(f"Error adding tooltip layer: {e}")
     else:
-        st.warning("No data available for tooltips.")
+        st.warning("Tooltip GeoDataFrame is empty.")
 
     if selected_province_id:
-        selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
-        if not selected_gdf.empty:
-            selected_gdf = selected_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
-            folium.GeoJson(
-                selected_gdf.to_json(),
-                style_function=lambda x: {
-                    'fillColor': 'none',
-                    'color': 'black',
-                    'weight': 3,
-                    'fillOpacity': 0
-                },
-                name='Selected Province'
-            ).add_to(m)
+        try:
+            selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
+            if not selected_gdf.empty:
+                selected_gdf = selected_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
+                folium.GeoJson(
+                    selected_gdf.to_json(),
+                    style_function=lambda x: {
+                        'fillColor': 'none',
+                        'color': 'black',
+                        'weight': 3,
+                        'fillOpacity': 0
+                    },
+                    name='Selected Province'
+                ).add_to(m)
+        except Exception as e:
+            st.error(f"Error adding selected province outline: {e}")
 
     folium.LayerControl().add_to(m)
     return m, merged_gdf
@@ -221,10 +241,14 @@ def main():
         st.warning("Please upload both the GeoJSON and Excel files to continue.")
         st.stop()
 
-    with open('IRN_adm.json', 'wb') as f:
-        f.write(uploaded_geojson.getvalue())
-    with open('IrDevIndextest.xlsx', 'wb') as f:
-        f.write(uploaded_excel.getvalue())
+    try:
+        with open('IRN_adm.json', 'wb') as f:
+            f.write(uploaded_geojson.getvalue())
+        with open('IrDevIndextest.xlsx', 'wb') as f:
+            f.write(uploaded_excel.getvalue())
+    except Exception as e:
+        st.error(f"Error saving uploaded files: {e}")
+        st.stop()
 
     try:
         gdf, excel_file, sheet_options, location_dict = load_data()
@@ -241,17 +265,27 @@ def main():
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
-    m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
+    try:
+        m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
+        if m is None or merged_gdf is None:
+            st.error("Map creation failed. Check logs above for details.")
+            return
+    except Exception as e:
+        st.error(f"Error in create_map: {e}")
+        return
 
-    # Use container width for responsiveness
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
-    map_data = st_folium(m, width=None, height=600)  # Remove fixed width, let it scale
+    map_data = st_folium(m, width=None, height=600)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("**Click on a region on the map to display its trend over years in the chart below.**")
 
     years = ['2019', '2020', '2021', '2022', '2023']
-    national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
+    try:
+        national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
+    except Exception as e:
+        st.error(f"Error calculating national averages: {e}")
+        return
 
     if map_data['last_clicked']:
         province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
@@ -269,12 +303,12 @@ def main():
         province_data = get_province_data(excel_file, sheet_options[selected_index_code], st.session_state.selected_province_id, years)
         if province_data:
             fig = create_line_chart(national_averages, province_data, province_name)
-            st.plotly_chart(fig, use_container_width=True)  # Responsive chart width
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No data found for the selected province.")
     else:
         fig = create_line_chart(national_averages)
-        st.plotly_chart(fig, use_container_width=True)  # Responsive chart width
+        st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     main()
