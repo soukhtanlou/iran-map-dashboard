@@ -95,6 +95,9 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     df = excel_file.parse(sheet)
     merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
 
+    # Prepare data for choropleth (drop non-serializable columns)
+    choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
+
     # Calculate centroids for tooltips
     merged_gdf['centroid'] = merged_gdf.geometry.centroid
     merged_gdf['lat'] = merged_gdf['centroid'].y
@@ -105,8 +108,8 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
 
     # Choropleth layer
     folium.Choropleth(
-        geo_data=merged_gdf.to_json(), name='choropleth',
-        data=merged_gdf, columns=['ID_1', year],
+        geo_data=choropleth_gdf.to_json(), name='choropleth',
+        data=choropleth_gdf, columns=['ID_1', year],
         key_on='feature.properties.ID_1', fill_color=fill_color,
         fill_opacity=0.8, line_opacity=0.2,
         legend_name=f'{selected_index_code} - {year}'
@@ -206,7 +209,6 @@ def main():
     if map_data['last_clicked']:
         province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
         if province_id:
-            # Update selected province immediately
             st.session_state.selected_province_id = province_id
             province_name = location_dict.get(province_id, "Unknown")
             province_data = get_province_data(excel_file, sheet_options[selected_index_code], province_id, years)
