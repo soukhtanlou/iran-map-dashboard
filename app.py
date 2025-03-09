@@ -9,7 +9,7 @@ import os
 import plotly.graph_objects as go
 from shapely.geometry import Point
 
-# Custom CSS for paler background and map framework
+# Custom CSS for paler background, map framework, and legend positioning
 custom_css = """
 <style>
     body {
@@ -95,31 +95,55 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     df = excel_file.parse(sheet)
     merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
 
-    m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')  # Lighter base map
+    # Calculate centroids for tooltips
+    merged_gdf['centroid'] = merged_gdf.geometry.centroid
+    merged_gdf['lat'] = merged_gdf['centroid'].y
+    merged_gdf['lon'] = merged_gdf['centroid'].x
+
+    m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')
     fill_color = 'Reds_r' if reverse_colors else 'Reds'
 
+    # Choropleth layer
     folium.Choropleth(
         geo_data=merged_gdf.to_json(), name='choropleth',
         data=merged_gdf, columns=['ID_1', year],
         key_on='feature.properties.ID_1', fill_color=fill_color,
-        fill_opacity=0.8, line_opacity=0.2,  # Slight outline for all provinces
+        fill_opacity=0.8, line_opacity=0.2,
         legend_name=f'{selected_index_code} - {year}'
     ).add_to(m)
 
-    # Add outline for selected province
+    # Tooltip layer with province info
+    tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year]].copy()
+    folium.GeoJson(
+        tooltip_gdf.to_json(),
+        style_function=lambda x: {
+            'fillColor': 'none',
+            'color': 'none',
+            'weight': 0,
+            'fillOpacity': 0
+        },
+        tooltip=folium.GeoJsonTooltip(
+            fields=['NAME_1', 'lat', 'lon', year],
+            aliases=['Province:', 'Latitude:', 'Longitude:', f'{selected_index_code} ({year}):'],
+            localize=True
+        )
+    ).add_to(m)
+
+    # Outline for selected province
     if selected_province_id:
         selected_gdf = merged_gdf[merged_gdf['ID_1'] == selected_province_id]
         folium.GeoJson(
             selected_gdf.to_json(),
             style_function=lambda x: {
                 'fillColor': 'none',
-                'color': 'black',  # Black outline for selected province
+                'color': 'black',
                 'weight': 3,
                 'fillOpacity': 0
-            }
+            },
+            name='Selected Province'
         ).add_to(m)
 
-    folium.LayerControl().add_to(m)  # Add layer control for better map interaction
+    folium.LayerControl().add_to(m)
     return m, merged_gdf
 
 def find_clicked_province(clicked_location, gdf):
@@ -160,15 +184,16 @@ def main():
     year = st.sidebar.selectbox("Select Year:", options=['2019', '2020', '2021', '2022', '2023'])
     reverse_colors = st.sidebar.checkbox("Reverse Colors")
 
-    # Track selected province
+    # Initialize session state for selected province
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
+    # Create map with current selected province
     m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
 
     # Display map in a framed container
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
-    map_data = st_folium(m, width=1200, height=600, key="folium_map")
+    map_data = st_folium(m, width=1200, height=600, key=f"folium_map_{selected_index_code}_{year}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Explanatory text
@@ -177,9 +202,11 @@ def main():
     years = ['2019', '2020', '2021', '2022', '2023']
     national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
 
+    # Handle click event
     if map_data['last_clicked']:
         province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
         if province_id:
+            # Update selected province immediately
             st.session_state.selected_province_id = province_id
             province_name = location_dict.get(province_id, "Unknown")
             province_data = get_province_data(excel_file, sheet_options[selected_index_code], province_id, years)
