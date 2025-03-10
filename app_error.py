@@ -173,7 +173,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     tooltip_style = lambda x: {'fillColor': 'transparent', 'color': 'none', 'weight': 0, 'fillOpacity': 0}
     outline_style = lambda x: {'fillColor': 'none', 'color': 'black', 'weight': 3, 'fillOpacity': 0}
 
-    # Tooltip layer
+    # Tooltip layer with improved styling
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', year, 'geometry']].copy()
     if not tooltip_gdf.empty and tooltip_gdf['geometry'].notna().any():
         try:
@@ -275,7 +275,7 @@ def main():
         st.stop()
     year = st.sidebar.selectbox("Select Year:", options=years)
 
-    # Color scheme options
+    # Visual enhancement: Color scheme options
     color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens', 'Purple': 'Purples'}
     selected_color = st.sidebar.selectbox("Select Color Scheme:", options=list(color_options.keys()), index=0)
     reverse_colors = st.sidebar.checkbox("Reverse Colors")
@@ -285,22 +285,22 @@ def main():
         st.session_state.selected_province_id = None
         st.rerun()
 
-    # Dynamic title
-    st.title(f"Geographic Development Index Dashboard - Education Sector ({selected_index_code}, {year})")
+    # Title (kept static for simplicity, can be made dynamic if desired)
+    st.title("Geographic Development Index Dashboard - Education Sector")
     st.markdown(custom_css, unsafe_allow_html=True)
 
     # Initialize session state
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
-    # Generate map with spinner
+    # Generate map with spinner for user feedback
     with st.spinner("Generating map..."):
         m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             return
 
-    # Display map
+    # Display map with dynamic height
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
     map_data = st_folium(m, width='100%', height=600 if st.session_state.get('screen_height', 1080) > 800 else 400)
     st.markdown('</div>', unsafe_allow_html=True)
