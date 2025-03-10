@@ -39,7 +39,9 @@ custom_css = """
 </style>
 """
 
+@st.cache_data
 def load_data():
+    """Load GeoJSON and Excel files, returning GeoDataFrame, ExcelFile, and dictionaries."""
     geojson_path = 'IRN_adm.json'
     excel_path = 'IrDevIndextest.xlsx'
 
@@ -73,15 +75,18 @@ def load_data():
     return gdf, excel_file, sheet_options, location_dict
 
 def calculate_national_averages(excel_file, sheet_name, years):
+    """Calculate national averages for the given years from the specified sheet."""
     df = excel_file.parse(sheet_name)
     return {year: df[year].mean() for year in years}
 
 def get_province_data(excel_file, sheet_name, province_id, years):
+    """Get province-specific data for the given years from the specified sheet."""
     df = excel_file.parse(sheet_name)
     province_data = df[df['ID_1'] == province_id]
     return {year: province_data[year].iloc[0] for year in years} if not province_data.empty else None
 
 def create_line_chart(national_averages, province_data=None, province_name=None):
+    """Create a Plotly line chart comparing national averages and province data."""
     years = list(national_averages.keys())
     fig = go.Figure()
 
@@ -134,7 +139,10 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
 
     return fig
 
-def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id=None):
+@st.cache_resource
+def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_color, selected_province_id=None):
+    """Create a Folium map with choropleth, tooltips, and selected province outline."""
+    # Merge GeoJSON with Excel data for the selected indicator and year
     try:
         sheet = sheet_options[selected_index_code]
         df = excel_file.parse(sheet)
@@ -143,6 +151,11 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         st.error(f"Error merging GeoDataFrame with Excel data: {e}")
         return None, None
 
+    # Check for missing data
+    if merged_gdf[year].isna().any():
+        st.warning(f"Some provinces lack data for {selected_index_code} in {year}.")
+
+    # Calculate centroids for province selection
     try:
         choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
         merged_gdf['centroid'] = merged_gdf.geometry.centroid
@@ -152,9 +165,11 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         st.error(f"Error processing centroids: {e}")
         return None, None
 
+    # Initialize Folium map
     m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')
-    fill_color = 'Reds_r' if reverse_colors else 'Reds'
+    fill_color = f"{selected_color}_r" if reverse_colors else selected_color
 
+    # Add choropleth layer
     try:
         folium.Choropleth(
             geo_data=choropleth_gdf.to_json(), name='choropleth',
@@ -167,6 +182,10 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         st.error(f"Error creating choropleth layer: {e}")
         return m, merged_gdf
 
+    # Define reusable style functions
+    tooltip_style = lambda x: {'fillColor': 'transparent', 'color': 'none', 'weight': 0, 'fillOpacity': 0}
+    outline_style = lambda x: {'fillColor': 'none', 'color': 'black', 'weight': 3, 'fillOpacity': 0}
+
     # Tooltip layer
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', year, 'geometry']].copy()
     if not tooltip_gdf.empty and tooltip_gdf['geometry'].notna().any():
@@ -176,17 +195,12 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
             if geojson_data.get("type") == "FeatureCollection":
                 folium.GeoJson(
                     geojson_data,
-                    style_function=lambda x: {
-                        'fillColor': 'transparent',
-                        'color': 'none',
-                        'weight': 0,
-                        'fillOpacity': 0
-                    },
+                    style_function=tooltip_style,
                     tooltip=folium.GeoJsonTooltip(
                         fields=['NAME_1', year],
                         aliases=['Province:', f'{selected_index_code} ({year}):'],
                         localize=True,
-                        style=("background-color: white; color: #333333; font-family: arial; font-size: 12px; padding: 10px;")
+                        style=("background-color: #f0f0f0; color: #004d40; font-family: 'Helvetica', sans-serif; font-size: 14px; padding: 8px; border-radius: 4px; border: 1px solid #004d40;")
                     ),
                     name='Tooltips'
                 ).add_to(m)
@@ -207,12 +221,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
                 selected_gdf = selected_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
                 folium.GeoJson(
                     selected_gdf.to_json(),
-                    style_function=lambda x: {
-                        'fillColor': 'none',
-                        'color': 'black',
-                        'weight': 3,
-                        'fillOpacity': 0
-                    },
+                    style_function=outline_style,
                     name='Selected Province'
                 ).add_to(m)
         except Exception as e:
@@ -222,6 +231,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     return m, merged_gdf
 
 def find_clicked_province(clicked_location, gdf):
+    """Identify the province clicked based on coordinates."""
     click_point = Point(clicked_location['lng'], clicked_location['lat'])
     for _, row in gdf.iterrows():
         if row['geometry'].contains(click_point):
@@ -230,10 +240,36 @@ def find_clicked_province(clicked_location, gdf):
 
 def main():
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
-    st.title("Geographic Development Index Dashboard - Education Sector")
 
+    # Load data once and cache it
+    gdf, excel_file, sheet_options, location_dict = load_data()
+
+    # Sidebar controls
+    st.sidebar.header("Dashboard Controls")
+    selected_index_code = st.sidebar.selectbox("Select Indicator:", options=list(sheet_options.keys()),
+                                               format_func=lambda x: f"{x} - {sheet_options[x]}")
+    
+    # Dynamic year options from the selected sheet
+    sheet = sheet_options[selected_index_code]
+    df = excel_file.parse(sheet)
+    years = [col for col in df.columns if col.isdigit()]
+    year = st.sidebar.selectbox("Select Year:", options=years)
+
+    # Color scheme options
+    color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens', 'Purple': 'Purples'}
+    selected_color = st.sidebar.selectbox("Select Color Scheme:", options=list(color_options.keys()), index=0)
+    reverse_colors = st.sidebar.checkbox("Reverse Colors")
+
+    # Reset button
+    if st.sidebar.button("Reset Selection"):
+        st.session_state.selected_province_id = None
+        st.rerun()
+
+    # Dynamic title
+    st.title(f"Geographic Development Index Dashboard - Education Sector ({selected_index_code}, {year})")
     st.markdown(custom_css, unsafe_allow_html=True)
 
+    # File uploaders
     uploaded_geojson = st.file_uploader("Upload GeoJSON file", type=['json'])
     uploaded_excel = st.file_uploader("Upload Excel file", type=['xlsx'])
 
@@ -250,37 +286,25 @@ def main():
         st.error(f"Error saving uploaded files: {e}")
         st.stop()
 
-    try:
-        gdf, excel_file, sheet_options, location_dict = load_data()
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return
-
-    st.sidebar.header("Dashboard Controls")
-    selected_index_code = st.sidebar.selectbox("Select Indicator:", options=list(sheet_options.keys()),
-                                               format_func=lambda x: f"{x} - {sheet_options[x]}")
-    year = st.sidebar.selectbox("Select Year:", options=['2019', '2020', '2021', '2022', '2023'])
-    reverse_colors = st.sidebar.checkbox("Reverse Colors")
-
+    # Initialize session state
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
-    try:
-        m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
+    # Generate map with spinner
+    with st.spinner("Generating map..."):
+        m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             return
-    except Exception as e:
-        st.error(f"Error in create_map: {e}")
-        return
 
+    # Display map
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
-    map_data = st_folium(m, width=None, height=600)
+    map_data = st_folium(m, width='100%', height=600 if st.session_state.get('screen_height', 1080) > 800 else 400)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("**Click on a region on the map to display its trend over years in the chart below.**")
 
-    years = ['2019', '2020', '2021', '2022', '2023']
+    # Generate line chart
     try:
         national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
     except Exception as e:
