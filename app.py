@@ -61,14 +61,12 @@ def load_geojson_and_mappings(geojson_path='IRN_adm.json', excel_path='IrDevInde
 
     return gdf, sheet_options, location_dict
 
-def calculate_national_averages(excel_file, sheet_name, years):
-    """Calculate national averages for the given years from the specified sheet."""
-    df = excel_file.parse(sheet_name)
+def calculate_national_averages(df, years):
+    """Calculate national averages for the given years from the DataFrame."""
     return {year: df[year].mean() for year in years}
 
-def get_province_data(excel_file, sheet_name, province_id, years):
-    """Get province-specific data for the given years from the specified sheet."""
-    df = excel_file.parse(sheet_name)
+def get_province_data(df, province_id, years):
+    """Get province-specific data for the given years from the DataFrame."""
     province_data = df[df['ID_1'] == province_id]
     return {year: province_data[year].iloc[0] for year in years} if not province_data.empty else None
 
@@ -127,12 +125,10 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     return fig
 
 @st.cache_resource
-def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_color, selected_province_id=None):
+def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, selected_color, selected_province_id=None):
     """Create a Folium map with choropleth, tooltips, and selected province outline."""
     # Merge GeoJSON with Excel data for the selected indicator and year
     try:
-        sheet = sheet_options[selected_index_code]
-        df = excel_file.parse(sheet)
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
     except Exception as e:
         st.error(f"Error merging GeoDataFrame with Excel data: {e}")
@@ -285,7 +281,7 @@ def main():
         st.session_state.selected_province_id = None
         st.rerun()
 
-    # Title (kept static for simplicity, can be made dynamic if desired)
+    # Title (kept static for simplicity)
     st.title("Geographic Development Index Dashboard - Education Sector")
     st.markdown(custom_css, unsafe_allow_html=True)
 
@@ -295,7 +291,7 @@ def main():
 
     # Generate map with spinner for user feedback
     with st.spinner("Generating map..."):
-        m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
+        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             return
@@ -309,7 +305,7 @@ def main():
 
     # Generate line chart
     try:
-        national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
+        national_averages = calculate_national_averages(df, years)
     except Exception as e:
         st.error(f"Error calculating national averages: {e}")
         return
@@ -327,7 +323,7 @@ def main():
 
     if st.session_state.selected_province_id:
         province_name = location_dict.get(st.session_state.selected_province_id, "Unknown")
-        province_data = get_province_data(excel_file, sheet_options[selected_index_code], st.session_state.selected_province_id, years)
+        province_data = get_province_data(df, st.session_state.selected_province_id, years)
         if province_data:
             fig = create_line_chart(national_averages, province_data, province_name)
             st.plotly_chart(fig, use_container_width=True)
