@@ -39,7 +39,7 @@ custom_css = """
 </style>
 """
 
-@st.cache_data
+@st.cache_resource
 def load_data():
     """Load GeoJSON and Excel files, returning GeoDataFrame, ExcelFile, and dictionaries."""
     geojson_path = 'IRN_adm.json'
