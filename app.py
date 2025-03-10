@@ -5,7 +5,6 @@ import pandas as pd
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
-import os
 import plotly.graph_objects as go
 from shapely.geometry import Point
 import json
@@ -124,7 +123,6 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
 
     return fig
 
-@st.cache_resource
 def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, selected_color, selected_province_id=None):
     """Create a Folium map with choropleth, tooltips, and selected province outline."""
     # Merge GeoJSON with Excel data for the selected indicator and year
