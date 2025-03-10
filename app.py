@@ -39,12 +39,9 @@ custom_css = """
 </style>
 """
 
-@st.cache_resource
-def load_data():
-    """Load GeoJSON and Excel files, returning GeoDataFrame, ExcelFile, and dictionaries."""
-    geojson_path = 'IRN_adm.json'
-    excel_path = 'IrDevIndextest.xlsx'
-
+@st.cache_data
+def load_geojson_and_mappings(geojson_path='IRN_adm.json', excel_path='IrDevIndextest.xlsx'):
+    """Load GeoJSON and Excel mappings, returning GeoDataFrame and dictionaries."""
     try:
         gdf = gpd.read_file(geojson_path)
         gdf.crs = 'epsg:4326'
@@ -54,25 +51,15 @@ def load_data():
 
     try:
         excel_file = pd.ExcelFile(excel_path)
-    except Exception as e:
-        st.error(f"Error loading Excel file: {e}")
-        st.stop()
-
-    try:
         index_df = excel_file.parse('Index')
         sheet_options = index_df.set_index('index code')['index'].to_dict()
-    except Exception as e:
-        st.error(f"Error parsing Index sheet: {e}")
-        st.stop()
-
-    try:
         location_df = excel_file.parse('Location ID')
         location_dict = location_df.set_index('ID_1')['NAME_1'].to_dict()
     except Exception as e:
-        st.error(f"Error parsing Location ID sheet: {e}")
+        st.error(f"Error parsing Excel mappings: {e}")
         st.stop()
 
-    return gdf, excel_file, sheet_options, location_dict
+    return gdf, sheet_options, location_dict
 
 def calculate_national_averages(excel_file, sheet_name, years):
     """Calculate national averages for the given years from the specified sheet."""
@@ -241,8 +228,34 @@ def find_clicked_province(clicked_location, gdf):
 def main():
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
 
-    # Load data once and cache it
-    gdf, excel_file, sheet_options, location_dict = load_data()
+    # File uploaders
+    uploaded_geojson = st.file_uploader("Upload GeoJSON file", type=['json'])
+    uploaded_excel = st.file_uploader("Upload Excel file", type=['xlsx'])
+
+    if not (uploaded_geojson and uploaded_excel):
+        st.warning("Please upload both the GeoJSON and Excel files to continue.")
+        st.stop()
+
+    excel_path = 'IrDevIndextest.xlsx'
+    geojson_path = 'IRN_adm.json'
+    try:
+        with open(geojson_path, 'wb') as f:
+            f.write(uploaded_geojson.getvalue())
+        with open(excel_path, 'wb') as f:
+            f.write(uploaded_excel.getvalue())
+    except Exception as e:
+        st.error(f"Error saving uploaded files: {e}")
+        st.stop()
+
+    # Load Excel file after upload
+    try:
+        excel_file = pd.ExcelFile(excel_path)
+    except Exception as e:
+        st.error(f"Error loading Excel file: {e}")
+        st.stop()
+
+    # Load cached GeoJSON and mappings
+    gdf, sheet_options, location_dict = load_geojson_and_mappings(geojson_path, excel_path)
 
     # Sidebar controls
     st.sidebar.header("Dashboard Controls")
@@ -251,8 +264,15 @@ def main():
     
     # Dynamic year options from the selected sheet
     sheet = sheet_options[selected_index_code]
-    df = excel_file.parse(sheet)
-    years = [col for col in df.columns if col.isdigit()]
+    try:
+        df = excel_file.parse(sheet)
+        years = [col for col in df.columns if col.isdigit()]
+        if not years:
+            st.error("No numeric year columns found in the selected sheet.")
+            st.stop()
+    except Exception as e:
+        st.error(f"Error parsing sheet '{sheet}': {e}")
+        st.stop()
     year = st.sidebar.selectbox("Select Year:", options=years)
 
     # Color scheme options
@@ -268,23 +288,6 @@ def main():
     # Dynamic title
     st.title(f"Geographic Development Index Dashboard - Education Sector ({selected_index_code}, {year})")
     st.markdown(custom_css, unsafe_allow_html=True)
-
-    # File uploaders
-    uploaded_geojson = st.file_uploader("Upload GeoJSON file", type=['json'])
-    uploaded_excel = st.file_uploader("Upload Excel file", type=['xlsx'])
-
-    if not (uploaded_geojson and uploaded_excel):
-        st.warning("Please upload both the GeoJSON and Excel files to continue.")
-        st.stop()
-
-    try:
-        with open('IRN_adm.json', 'wb') as f:
-            f.write(uploaded_geojson.getvalue())
-        with open('IrDevIndextest.xlsx', 'wb') as f:
-            f.write(uploaded_excel.getvalue())
-    except Exception as e:
-        st.error(f"Error saving uploaded files: {e}")
-        st.stop()
 
     # Initialize session state
     if 'selected_province_id' not in st.session_state:
