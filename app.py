@@ -166,6 +166,7 @@ def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors
     # Define reusable style functions
     tooltip_style = lambda x: {'fillColor': 'transparent', 'color': 'none', 'weight': 0, 'fillOpacity': 0}
     outline_style = lambda x: {'fillColor': 'none', 'color': 'black', 'weight': 3, 'fillOpacity': 0}
+    no_data_style = lambda x: {'fillColor': '#f0f0f0', 'color': '#cccccc', 'weight': 1, 'fillOpacity': 0.6, 'dashArray': '5, 5'}
 
     # Tooltip layer with improved styling
     tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', year, 'geometry']].copy()
@@ -176,7 +177,7 @@ def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors
             if geojson_data.get("type") == "FeatureCollection":
                 folium.GeoJson(
                     geojson_data,
-                    style_function=tooltip_style,
+                    style_function=lambda x: no_data_style(x) if pd.isna(x['properties'][year]) else tooltip_style(x),
                     tooltip=folium.GeoJsonTooltip(
                         fields=['NAME_1', year],
                         aliases=['Province:', f'{selected_index_code} ({year}):'],
@@ -270,7 +271,7 @@ def main():
     year = st.sidebar.selectbox("Select Year:", options=years)
 
     # Visual enhancement: Color scheme options
-    color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens', 'Purple': 'Purples'}
+    color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens'}  # Removed 'Purple'
     selected_color = st.sidebar.selectbox("Select Color Scheme:", options=list(color_options.keys()), index=0)
     reverse_colors = st.sidebar.checkbox("Reverse Colors")
 
