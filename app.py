@@ -165,7 +165,7 @@ def main():
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
 
     # Load files directly from the repository root
-    excel_path = os.path.join(os.path.dirname(__file__), 'IrDevIndextest.xlsx')
+    excel_path = os.path.join(os.path.dirname(__file__), 'IrDevIndex2.xlsx')
     geojson_path = os.path.join(os.path.dirname(__file__), 'IRN_adm.json')
 
     # Load cached GeoJSON and mappings
