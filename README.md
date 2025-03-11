@@ -33,6 +33,8 @@ The Geographic Development Index Dashboard is an interactive web app built with 
 
 ![Dashboard Map](dashboard_map.jpeg)  
 
+**Visit**
+[Here](https://iran-map-dashboard-askhiozygtwnii4szgafaf.streamlit.app/)
 
 **Installation**
 
