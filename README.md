@@ -1,24 +1,45 @@
-Geographic Development Index Dashboard - Education Sector
-Overview
-The Geographic Development Index Dashboard is an interactive web application built with Streamlit to visualize educational development indices across provinces in Iran. It integrates geospatial data from a GeoJSON file (IRN_adm.json) with tabular data from an Excel file (IrDevIndextest.xlsx) to provide a choropleth map and trend analysis over multiple years. This tool is designed for educators, policymakers, and researchers to explore and compare educational metrics geographically and temporally.
+# Geographic Development Index Dashboard - Education Sector
 
-Features
-Interactive Choropleth Map:
-Displays province-level data with customizable color schemes (Red, Blue, Green, Purple).
-Hover tooltips show province names and selected indicator values with a modern, styled design.
-Clicking a province highlights it with a black outline and updates the trend chart.
-Dynamic Controls:
-Select indicators and years from dropdown menus populated dynamically from the Excel data.
-Toggle color reversal for the choropleth map.
-Reset province selection with a dedicated button.
-Trend Analysis:
-A Plotly line chart compares national averages with province-specific trends over selectable years.
-Updates automatically when a province is clicked on the map.
-Performance and Usability:
-Cached GeoJSON loading and map generation for faster reruns.
-Responsive map height adjusts to screen size.
-Loading spinner provides feedback during map creation.
-Warnings for missing data enhance data transparency.
-Data Handling:
-Supports uploading custom GeoJSON and Excel files.
-Robust error handling for file loading and parsing.
+**Overview**
+
+The Geographic Development Index Dashboard is an interactive web app built with [Streamlit](https://streamlit.io/) to visualize educational development indices across Iran's provinces. It combines geospatial data (`IRN_adm.json`) with Excel data (`IrDevIndextest.xlsx`) to offer a choropleth map and trend analysis.
+
+**Features**
+
+- **Interactive Choropleth Map**
+  - Customizable colors (Red, Blue, Green, Purple).
+  - Styled tooltips on hover with province and indicator details.
+  - Click to highlight provinces and update trends.
+
+- **Dynamic Controls**
+  - Select indicators and years from dynamic dropdowns.
+  - Reverse color scheme option.
+  - Reset selection button.
+
+- **Trend Analysis**
+  - Plotly line chart comparing national and province trends.
+  - Updates on province click.
+
+- **Performance & Usability**
+  - Cached GeoJSON and map generation.
+  - Responsive map height.
+  - Loading spinner and missing data warnings.
+
+- **Data Handling**
+  - Upload custom GeoJSON and Excel files.
+  - Robust error handling.
+
+**Screenshots**
+
+![Dashboard Map](images/dashboard_map.png)  
+![Trend Chart](images/trend_chart.png)
+
+**Installation**
+
+**Prerequisites**
+- Python 3.8+
+- Virtual environment (recommended)
+
+**Dependencies**
+```bash
+pip install streamlit pandas geopandas folium streamlit-folium plotly shapely
