@@ -5,7 +5,6 @@ import pandas as pd
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
-import os
 import plotly.graph_objects as go
 from shapely.geometry import Point
 import json
@@ -39,10 +38,9 @@ custom_css = """
 </style>
 """
 
-def load_data():
-    geojson_path = 'IRN_adm.json'
-    excel_path = 'IrDevIndextest.xlsx'
-
+@st.cache_data
+def load_geojson_and_mappings(geojson_path='IRN_adm.json', excel_path='IrDevIndextest.xlsx'):
+    """Load GeoJSON and Excel mappings, returning GeoDataFrame and dictionaries."""
     try:
         gdf = gpd.read_file(geojson_path)
         gdf.crs = 'epsg:4326'
@@ -52,36 +50,27 @@ def load_data():
 
     try:
         excel_file = pd.ExcelFile(excel_path)
-    except Exception as e:
-        st.error(f"Error loading Excel file: {e}")
-        st.stop()
-
-    try:
         index_df = excel_file.parse('Index')
         sheet_options = index_df.set_index('index code')['index'].to_dict()
-    except Exception as e:
-        st.error(f"Error parsing Index sheet: {e}")
-        st.stop()
-
-    try:
         location_df = excel_file.parse('Location ID')
         location_dict = location_df.set_index('ID_1')['NAME_1'].to_dict()
     except Exception as e:
-        st.error(f"Error parsing Location ID sheet: {e}")
+        st.error(f"Error parsing Excel mappings: {e}")
         st.stop()
 
-    return gdf, excel_file, sheet_options, location_dict
+    return gdf, sheet_options, location_dict
 
-def calculate_national_averages(excel_file, sheet_name, years):
-    df = excel_file.parse(sheet_name)
+def calculate_national_averages(df, years):
+    """Calculate national averages for the given years from the DataFrame."""
     return {year: df[year].mean() for year in years}
 
-def get_province_data(excel_file, sheet_name, province_id, years):
-    df = excel_file.parse(sheet_name)
+def get_province_data(df, province_id, years):
+    """Get province-specific data for the given years from the DataFrame."""
     province_data = df[df['ID_1'] == province_id]
     return {year: province_data[year].iloc[0] for year in years} if not province_data.empty else None
 
 def create_line_chart(national_averages, province_data=None, province_name=None):
+    """Create a Plotly line chart comparing national averages and province data."""
     years = list(national_averages.keys())
     fig = go.Figure()
 
@@ -134,14 +123,16 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
 
     return fig
 
-def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, selected_province_id=None):
+def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, selected_color, selected_province_id=None):
+    """Create a Folium map with choropleth, tooltips, and selected province outline."""
     try:
-        sheet = sheet_options[selected_index_code]
-        df = excel_file.parse(sheet)
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
     except Exception as e:
         st.error(f"Error merging GeoDataFrame with Excel data: {e}")
         return None, None
+
+    if merged_gdf[year].isna().any():
+        st.warning(f"Some provinces lack data for {selected_index_code} in {year}.")
 
     try:
         choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
@@ -153,7 +144,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         return None, None
 
     m = folium.Map(location=[32, 53], zoom_start=5, tiles='cartodbpositron')
-    fill_color = 'Reds_r' if reverse_colors else 'Reds'
+    fill_color = f"{selected_color}_r" if reverse_colors else selected_color
 
     try:
         folium.Choropleth(
@@ -167,38 +158,35 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
         st.error(f"Error creating choropleth layer: {e}")
         return m, merged_gdf
 
-    # Tooltip layer with debugging
-    tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', 'lat', 'lon', year, 'geometry']].copy()
-    if not tooltip_gdf.empty:
+    tooltip_style = lambda x: {'fillColor': 'transparent', 'color': 'none', 'weight': 0, 'fillOpacity': 0}
+    outline_style = lambda x: {'fillColor': 'none', 'color': 'black', 'weight': 3, 'fillOpacity': 0}
+    no_data_style = lambda x: {'fillColor': '#f0f0f0', 'color': '#cccccc', 'weight': 1, 'fillOpacity': 0.6, 'dashArray': '5, 5'}
+
+    tooltip_gdf = merged_gdf[['ID_1', 'NAME_1', year, 'geometry']].copy()
+    if not tooltip_gdf.empty and tooltip_gdf['geometry'].notna().any():
         try:
             geojson_str = tooltip_gdf.to_json()
             geojson_data = json.loads(geojson_str)
             if geojson_data.get("type") == "FeatureCollection":
                 folium.GeoJson(
                     geojson_data,
-                    style_function=lambda x: {
-                        'fillColor': 'none',
-                        'color': 'none',
-                        'weight': 0,
-                        'fillOpacity': 0
-                    },
+                    style_function=lambda x: no_data_style(x) if pd.isna(x['properties'][year]) else tooltip_style(x),
                     tooltip=folium.GeoJsonTooltip(
-                        fields=['NAME_1', 'lat', 'lon', year],
-                        aliases=['Province:', 'Latitude:', 'Longitude:', f'{selected_index_code} ({year}):'],
-                        localize=True
+                        fields=['NAME_1', year],
+                        aliases=['Province:', f'{selected_index_code} ({year}):'],
+                        localize=True,
+                        style=("background-color: #f0f0f0; color: #004d40; font-family: 'Helvetica', sans-serif; font-size: 14px; padding: 8px; border-radius: 4px; border: 1px solid #004d40;")
                     ),
                     name='Tooltips'
                 ).add_to(m)
             else:
                 st.error(f"Tooltip GeoJSON is not a FeatureCollection. Type: {geojson_data.get('type')}")
-                st.write("Tooltip GeoJSON sample:", geojson_data)  # Debug output
         except json.JSONDecodeError as e:
             st.error(f"Failed to parse GeoJSON for tooltips: {str(e)}")
-            st.write("Raw GeoJSON string:", geojson_str)  # Debug output
         except Exception as e:
             st.error(f"Error adding tooltip layer: {e}")
     else:
-        st.warning("Tooltip GeoDataFrame is empty.")
+        st.warning("Tooltip GeoDataFrame is empty or has no valid geometries.")
 
     if selected_province_id:
         try:
@@ -207,12 +195,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
                 selected_gdf = selected_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
                 folium.GeoJson(
                     selected_gdf.to_json(),
-                    style_function=lambda x: {
-                        'fillColor': 'none',
-                        'color': 'black',
-                        'weight': 3,
-                        'fillOpacity': 0
-                    },
+                    style_function=outline_style,
                     name='Selected Province'
                 ).add_to(m)
         except Exception as e:
@@ -222,6 +205,7 @@ def create_map(gdf, excel_file, sheet_options, location_dict, selected_index_cod
     return m, merged_gdf
 
 def find_clicked_province(clicked_location, gdf):
+    """Identify the province clicked based on coordinates."""
     click_point = Point(clicked_location['lng'], clicked_location['lat'])
     for _, row in gdf.iterrows():
         if row['geometry'].contains(click_point):
@@ -230,59 +214,74 @@ def find_clicked_province(clicked_location, gdf):
 
 def main():
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
-    st.title("Geographic Development Index Dashboard - Education Sector")
 
-    st.markdown(custom_css, unsafe_allow_html=True)
+    # Load files directly from the repository (no uploaders)
+    excel_path = 'IrDevIndextest.xlsx'
+    geojson_path = 'IRN_adm.json'
 
-    uploaded_geojson = st.file_uploader("Upload GeoJSON file", type=['json'])
-    uploaded_excel = st.file_uploader("Upload Excel file", type=['xlsx'])
+    # Load cached GeoJSON and mappings
+    gdf, sheet_options, location_dict = load_geojson_and_mappings(geojson_path, excel_path)
 
-    if not (uploaded_geojson and uploaded_excel):
-        st.warning("Please upload both the GeoJSON and Excel files to continue.")
+    # Load Excel file
+    try:
+        excel_file = pd.ExcelFile(excel_path)
+    except Exception as e:
+        st.error(f"Error loading Excel file: {e}")
         st.stop()
 
-    try:
-        with open('IRN_adm.json', 'wb') as f:
-            f.write(uploaded_geojson.getvalue())
-        with open('IrDevIndextest.xlsx', 'wb') as f:
-            f.write(uploaded_excel.getvalue())
-    except Exception as e:
-        st.error(f"Error saving uploaded files: {e}")
-        st.stop()
-
-    try:
-        gdf, excel_file, sheet_options, location_dict = load_data()
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return
-
+    # Sidebar controls
     st.sidebar.header("Dashboard Controls")
     selected_index_code = st.sidebar.selectbox("Select Indicator:", options=list(sheet_options.keys()),
                                                format_func=lambda x: f"{x} - {sheet_options[x]}")
-    year = st.sidebar.selectbox("Select Year:", options=['2019', '2020', '2021', '2022', '2023'])
+    
+    # Dynamic year options from the selected sheet
+    sheet = sheet_options[selected_index_code]
+    try:
+        df = excel_file.parse(sheet)
+        years = [col for col in df.columns if col.isdigit()]
+        if not years:
+            st.error("No numeric year columns found in the selected sheet.")
+            st.stop()
+    except Exception as e:
+        st.error(f"Error parsing sheet '{sheet}': {e}")
+        st.stop()
+    year = st.sidebar.selectbox("Select Year:", options=years)
+
+    # Visual enhancement: Color scheme options
+    color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens'}
+    selected_color = st.sidebar.selectbox("Select Color Scheme:", options=list(color_options.keys()), index=0)
     reverse_colors = st.sidebar.checkbox("Reverse Colors")
 
+    # Reset button
+    if st.sidebar.button("Reset Selection"):
+        st.session_state.selected_province_id = None
+        st.rerun()
+
+    # Title
+    st.title("Geographic Development Index Dashboard - Education Sector")
+    st.markdown(custom_css, unsafe_allow_html=True)
+
+    # Initialize session state
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
-    try:
-        m, merged_gdf = create_map(gdf, excel_file, sheet_options, location_dict, selected_index_code, year, reverse_colors, st.session_state.selected_province_id)
+    # Generate map with spinner for user feedback
+    with st.spinner("Generating map..."):
+        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             return
-    except Exception as e:
-        st.error(f"Error in create_map: {e}")
-        return
 
+    # Display map with dynamic height
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
-    map_data = st_folium(m, width=None, height=600)
+    map_data = st_folium(m, width='100%', height=600 if st.session_state.get('screen_height', 1080) > 800 else 400)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("**Click on a region on the map to display its trend over years in the chart below.**")
 
-    years = ['2019', '2020', '2021', '2022', '2023']
+    # Generate line chart
     try:
-        national_averages = calculate_national_averages(excel_file, sheet_options[selected_index_code], years)
+        national_averages = calculate_national_averages(df, years)
     except Exception as e:
         st.error(f"Error calculating national averages: {e}")
         return
@@ -300,7 +299,7 @@ def main():
 
     if st.session_state.selected_province_id:
         province_name = location_dict.get(st.session_state.selected_province_id, "Unknown")
-        province_data = get_province_data(excel_file, sheet_options[selected_index_code], st.session_state.selected_province_id, years)
+        province_data = get_province_data(df, st.session_state.selected_province_id, years)
         if province_data:
             fig = create_line_chart(national_averages, province_data, province_name)
             st.plotly_chart(fig, use_container_width=True)
