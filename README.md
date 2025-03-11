@@ -31,8 +31,8 @@ The Geographic Development Index Dashboard is an interactive web app built with 
 
 **Screenshots**
 
-![Dashboard Map](images/dashboard_map.png)  
-![Trend Chart](images/trend_chart.png)
+![Dashboard Map](dashboard_map.png)  
+
 
 **Installation**
 
