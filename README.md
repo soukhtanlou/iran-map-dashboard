@@ -7,7 +7,7 @@ The Geographic Development Index Dashboard is an interactive web app built with 
 **Features**
 
 - **Interactive Choropleth Map**
-  - Customizable colors (Red, Blue, Green, Purple).
+  - Customizable colors (Red, Blue, Green).
   - Styled tooltips on hover with province and indicator details.
   - Click to highlight provinces and update trends.
 
