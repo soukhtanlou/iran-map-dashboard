@@ -10,7 +10,7 @@ from shapely.geometry import Point
 import json
 import os
 
-# Custom CSS for responsive layout
+# Custom CSS for responsive layout (unchanged)
 custom_css = """
 <style>
     body {
@@ -41,12 +41,12 @@ custom_css = """
 
 @st.cache_data
 def load_geojson_and_mappings(geojson_path, excel_path):
-    """Load GeoJSON and Excel mappings, returning GeoDataFrame and location dictionary."""
+    """Load GeoJSON and location mappings, returning GeoDataFrame and dictionary."""
     try:
         gdf = gpd.read_file(geojson_path)
         gdf.crs = 'epsg:4326'
     except Exception as e:
-        st.error(f"Error loading GeoJSON file: {e}")
+        st.error(f"Error loading GeoJSON file '{geojson_path}': {e}")
         st.stop()
 
     try:
@@ -57,39 +57,39 @@ def load_geojson_and_mappings(geojson_path, excel_path):
         location_df = excel_file.parse('Location ID')
         location_dict = location_df.set_index('ID_1')['NAME_1'].to_dict()
     except Exception as e:
-        st.error(f"Error parsing Location ID sheet: {e}")
+        st.error(f"Error parsing 'Location ID' sheet from '{excel_path}': {e}")
         st.stop()
 
     return gdf, location_dict
 
 @st.cache_data
 def load_sector_data(excel_path):
-    """Load main sectors and their sub-indicator mappings from Excel with error handling."""
+    """Load main sectors and sub-indicator mappings from Excel."""
     try:
         excel_file = pd.ExcelFile(excel_path)
         if 'main_ind' not in excel_file.sheet_names:
-            st.error("Excel file is missing the 'main_ind' sheet.")
+            st.error("Excel file is missing the 'main_ind' sheet. Required for sector selection.")
             st.stop()
         main_ind_df = excel_file.parse('main_ind')
-        if 'main-index-code' not in main_ind_df.columns or 'main-index-name' not in main_ind_df.columns:
-            st.error("The 'main_ind' sheet must have 'main-index-code' and 'main-index-name' columns.")
+        if not {'main-index-code', 'main-index-name'}.issubset(main_ind_df.columns):
+            st.error("'main_ind' sheet must have 'main-index-code' and 'main-index-name' columns.")
             st.stop()
         main_options = main_ind_df.set_index('main-index-name')['main-index-code'].to_dict()
-        
+
         sub_options = {}
         for sheet_name in main_options.values():
             if sheet_name not in excel_file.sheet_names:
                 st.error(f"Sub-indicator sheet '{sheet_name}' not found in Excel file.")
                 st.stop()
             sub_df = excel_file.parse(sheet_name)
-            if 'index' not in sub_df.columns or 'index code' not in sub_df.columns:
+            if not {'index', 'index code'}.issubset(sub_df.columns):
                 st.error(f"Sheet '{sheet_name}' must have 'index' and 'index code' columns.")
                 st.stop()
             sub_options[sheet_name] = sub_df.set_index('index')['index code'].to_dict()
-        
+
         return main_options, sub_options
     except Exception as e:
-        st.error(f"Error loading sector data: {e}")
+        st.error(f"Error loading sector data from '{excel_path}': {e}")
         st.stop()
 
 def calculate_national_averages(df, years):
@@ -130,7 +130,7 @@ def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, sel
     try:
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
     except Exception as e:
-        st.error(f"Error merging GeoDataFrame with Excel data: {e}")
+        st.error(f"Error merging GeoDataFrame with data: {e}")
         return None, None
     if merged_gdf[year].isna().any():
         st.warning(f"Some provinces lack data for {selected_index} in {year}.")
@@ -201,11 +201,19 @@ def main():
     """Main function to run the Streamlit app."""
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
 
-    # Load files from the repository root
+    # File paths
     excel_path = os.path.join(os.path.dirname(__file__), 'IrDevIndex2.xlsx')
     geojson_path = os.path.join(os.path.dirname(__file__), 'IRN_adm.json')
 
-    # Load cached GeoJSON and mappings
+    # Verify file existence
+    if not os.path.exists(excel_path):
+        st.error(f"Excel file not found at: {excel_path}")
+        st.stop()
+    if not os.path.exists(geojson_path):
+        st.error(f"GeoJSON file not found at: {geojson_path}")
+        st.stop()
+
+    # Load GeoJSON and location mappings
     gdf, location_dict = load_geojson_and_mappings(geojson_path, excel_path)
 
     # Load sector data
@@ -213,7 +221,7 @@ def main():
 
     # Sidebar controls
     st.sidebar.header("Dashboard Controls")
-    
+
     # Select main sector
     selected_main_sector = st.sidebar.selectbox("Select Main Sector:", options=list(main_options.keys()))
     selected_main_code = main_options[selected_main_sector]  # e.g., "Index02"
@@ -238,10 +246,10 @@ def main():
             st.error(f"No numeric year columns found in data sheet '{selected_index_code}'.")
             st.stop()
     except Exception as e:
-        st.error(f"Error parsing data sheet '{selected_index_code}': {e}")
+        st.error(f"Error loading data sheet '{selected_index_code}': {e}")
         st.stop()
 
-    # Additional sidebar options
+    # Additional controls
     year = st.sidebar.selectbox("Select Year:", options=years)
     color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens'}
     selected_color = st.sidebar.selectbox("Select Color Scheme:", options=list(color_options.keys()), index=0)
@@ -262,7 +270,7 @@ def main():
         m, merged_gdf = create_map(gdf, df, location_dict, selected_index, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
-            return
+            st.stop()
 
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
     map_data = st_folium(m, width='100%', height=600 if st.session_state.get('screen_height', 1080) > 800 else 400)
@@ -274,9 +282,9 @@ def main():
         national_averages = calculate_national_averages(df, years)
     except Exception as e:
         st.error(f"Error calculating national averages: {e}")
-        return
+        st.stop()
 
-    if map_data['last_clicked']:
+    if map_data.get('last_clicked'):
         province_id = find_clicked_province(map_data['last_clicked'], merged_gdf)
         if province_id and province_id != st.session_state.selected_province_id:
             st.session_state.selected_province_id = province_id
@@ -303,5 +311,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"Error: {e}")
+        st.error(f"Application error: {e}")
         raise
