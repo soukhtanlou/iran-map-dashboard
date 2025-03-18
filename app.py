@@ -10,7 +10,7 @@ from shapely.geometry import Point
 import json
 import os
 
-# Custom CSS for responsive layout (unchanged)
+# Custom CSS for responsive layout
 custom_css = """
 <style>
     body {
@@ -51,6 +51,9 @@ def load_geojson_and_mappings(geojson_path, excel_path):
 
     try:
         excel_file = pd.ExcelFile(excel_path)
+        if 'Location ID' not in excel_file.sheet_names:
+            st.error("Excel file is missing the 'Location ID' sheet.")
+            st.stop()
         location_df = excel_file.parse('Location ID')
         location_dict = location_df.set_index('ID_1')['NAME_1'].to_dict()
     except Exception as e:
@@ -59,19 +62,29 @@ def load_geojson_and_mappings(geojson_path, excel_path):
 
     return gdf, location_dict
 
-# New function to load main sectors and sub-indicators
 @st.cache_data
 def load_sector_data(excel_path):
-    """Load main sectors and their sub-indicator mappings from Excel."""
+    """Load main sectors and their sub-indicator mappings from Excel with error handling."""
     try:
         excel_file = pd.ExcelFile(excel_path)
+        if 'main_ind' not in excel_file.sheet_names:
+            st.error("Excel file is missing the 'main_ind' sheet.")
+            st.stop()
         main_ind_df = excel_file.parse('main_ind')
+        if 'main-index-code' not in main_ind_df.columns or 'main-index-name' not in main_ind_df.columns:
+            st.error("The 'main_ind' sheet must have 'main-index-code' and 'main-index-name' columns.")
+            st.stop()
         main_options = main_ind_df.set_index('main-index-name')['main-index-code'].to_dict()
         
-        # Load all sub-indicator sheets into a dictionary
         sub_options = {}
         for sheet_name in main_options.values():
+            if sheet_name not in excel_file.sheet_names:
+                st.error(f"Sub-indicator sheet '{sheet_name}' not found in Excel file.")
+                st.stop()
             sub_df = excel_file.parse(sheet_name)
+            if 'index' not in sub_df.columns or 'index code' not in sub_df.columns:
+                st.error(f"Sheet '{sheet_name}' must have 'index' and 'index code' columns.")
+                st.stop()
             sub_options[sheet_name] = sub_df.set_index('index')['index code'].to_dict()
         
         return main_options, sub_options
@@ -80,13 +93,16 @@ def load_sector_data(excel_path):
         st.stop()
 
 def calculate_national_averages(df, years):
+    """Calculate national averages for each year."""
     return {year: df[year].mean() for year in years}
 
 def get_province_data(df, province_id, years):
+    """Get data for a specific province across years."""
     province_data = df[df['ID_1'] == province_id]
     return {year: province_data[year].iloc[0] for year in years} if not province_data.empty else None
 
 def create_line_chart(national_averages, province_data=None, province_name=None):
+    """Create a line chart comparing national averages and province data."""
     years = list(national_averages.keys())
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -97,8 +113,7 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     if province_data and province_name:
         fig.add_trace(go.Scatter(
             x=years, y=[province_data[year] for year in years], name=province_name,
-            line=dict(color='#ff7f0e', width=2.5, dash='dash'), mode='lines+markers', marker=dict(size=8, symbol_;
-='circle'),
+            line=dict(color='#ff7f0e', width=2.5, dash='dash'), mode='lines+markers', marker=dict(size=8, symbol='circle'),
             hovertemplate='%{y:.2f}<extra></extra>'
         ))
     fig.update_layout(
@@ -110,14 +125,15 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     )
     return fig
 
-def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, selected_color, selected_province_id=None):
+def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, selected_color, selected_province_id=None):
+    """Create a choropleth map with tooltips and province highlighting."""
     try:
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
     except Exception as e:
         st.error(f"Error merging GeoDataFrame with Excel data: {e}")
         return None, None
     if merged_gdf[year].isna().any():
-        st.warning(f"Some provinces lack data for {selected_index_code} in {year}.")
+        st.warning(f"Some provinces lack data for {selected_index} in {year}.")
     try:
         choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
         merged_gdf['centroid'] = merged_gdf.geometry.centroid
@@ -133,7 +149,7 @@ def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors
             geo_data=choropleth_gdf.to_json(), name='choropleth',
             data=choropleth_gdf, columns=['ID_1', year], key_on='feature.properties.ID_1',
             fill_color=fill_color, fill_opacity=0.8, line_opacity=0.2,
-            legend_name=f'{selected_index_code} - {year}'
+            legend_name=f'{selected_index} - {year}'
         ).add_to(m)
     except Exception as e:
         st.error(f"Error creating choropleth layer: {e}")
@@ -151,7 +167,7 @@ def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors
                     geojson_data,
                     style_function=lambda x: no_data_style(x) if pd.isna(x['properties'][year]) else tooltip_style(x),
                     tooltip=folium.GeoJsonTooltip(
-                        fields=['NAME_1', year], aliases=['Province:', f'{selected_index_code} ({year}):'],
+                        fields=['NAME_1', year], aliases=['Province:', f'{selected_index} ({year}):'],
                         localize=True, style="background-color: #f0f0f0; color: #004d40; font-family: 'Helvetica', sans-serif; font-size: 14px; padding: 8px; border-radius: 4px; border: 1px solid #004d40;"
                     ),
                     name='Tooltips'
@@ -174,6 +190,7 @@ def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors
     return m, merged_gdf
 
 def find_clicked_province(clicked_location, gdf):
+    """Identify the province clicked on the map."""
     click_point = Point(clicked_location['lng'], clicked_location['lat'])
     for _, row in gdf.iterrows():
         if row['geometry'].contains(click_point):
@@ -181,26 +198,27 @@ def find_clicked_province(clicked_location, gdf):
     return None
 
 def main():
+    """Main function to run the Streamlit app."""
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
 
-    # Load files directly from the repository root
+    # Load files from the repository root
     excel_path = os.path.join(os.path.dirname(__file__), 'IrDevIndex2.xlsx')
     geojson_path = os.path.join(os.path.dirname(__file__), 'IRN_adm.json')
 
     # Load cached GeoJSON and mappings
     gdf, location_dict = load_geojson_and_mappings(geojson_path, excel_path)
 
-    # Load sector data (new)
+    # Load sector data
     main_options, sub_options = load_sector_data(excel_path)
 
     # Sidebar controls
     st.sidebar.header("Dashboard Controls")
     
-    # New dropdown for main sector
+    # Select main sector
     selected_main_sector = st.sidebar.selectbox("Select Main Sector:", options=list(main_options.keys()))
     selected_main_code = main_options[selected_main_sector]  # e.g., "Index02"
 
-    # Filter sub-indicators based on selected main sector
+    # Filter and select sub-indicator
     sub_indicators = sub_options[selected_main_code]  # e.g., {"2-9 - The share...": "Index02-9"}
     selected_index = st.sidebar.selectbox("Select Indicator:", options=list(sub_indicators.keys()))
     selected_index_code = sub_indicators[selected_index]  # e.g., "Index02-9"
@@ -208,15 +226,22 @@ def main():
     # Load data for the selected sub-indicator
     try:
         excel_file = pd.ExcelFile(excel_path)
-        df = excel_file.parse(selected_index_code)  # Load the data sheet (e.g., "Index02-9")
+        if selected_index_code not in excel_file.sheet_names:
+            st.error(f"Data sheet '{selected_index_code}' not found in Excel file.")
+            st.stop()
+        df = excel_file.parse(selected_index_code)
+        if 'ID_1' not in df.columns:
+            st.error(f"Data sheet '{selected_index_code}' must have an 'ID_1' column.")
+            st.stop()
         years = [col for col in df.columns if col.isdigit()]
         if not years:
-            st.error("No numeric year columns found in the selected data sheet.")
+            st.error(f"No numeric year columns found in data sheet '{selected_index_code}'.")
             st.stop()
     except Exception as e:
         st.error(f"Error parsing data sheet '{selected_index_code}': {e}")
         st.stop()
 
+    # Additional sidebar options
     year = st.sidebar.selectbox("Select Year:", options=years)
     color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens'}
     selected_color = st.sidebar.selectbox("Select Color Scheme:", options=list(color_options.keys()), index=0)
@@ -226,6 +251,7 @@ def main():
         st.session_state.selected_province_id = None
         st.rerun()
 
+    # Main UI
     st.title("Geographic Development Index Dashboard")
     st.markdown(custom_css, unsafe_allow_html=True)
 
@@ -274,4 +300,8 @@ def main():
         st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"Error: {e}")
+        raise
