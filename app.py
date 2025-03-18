@@ -10,7 +10,7 @@ from shapely.geometry import Point
 import json
 import os
 
-# Custom CSS for responsive layout
+# Custom CSS for responsive layout (unchanged)
 custom_css = """
 <style>
     body {
@@ -41,7 +41,7 @@ custom_css = """
 
 @st.cache_data
 def load_geojson_and_mappings(geojson_path, excel_path):
-    """Load GeoJSON and Excel mappings, returning GeoDataFrame and dictionaries."""
+    """Load GeoJSON and Excel mappings, returning GeoDataFrame and location dictionary."""
     try:
         gdf = gpd.read_file(geojson_path)
         gdf.crs = 'epsg:4326'
@@ -51,15 +51,33 @@ def load_geojson_and_mappings(geojson_path, excel_path):
 
     try:
         excel_file = pd.ExcelFile(excel_path)
-        index_df = excel_file.parse('Index')
-        sheet_options = index_df.set_index('index code')['index'].to_dict()
         location_df = excel_file.parse('Location ID')
         location_dict = location_df.set_index('ID_1')['NAME_1'].to_dict()
     except Exception as e:
-        st.error(f"Error parsing Excel mappings: {e}")
+        st.error(f"Error parsing Location ID sheet: {e}")
         st.stop()
 
-    return gdf, sheet_options, location_dict
+    return gdf, location_dict
+
+# New function to load main sectors and sub-indicators
+@st.cache_data
+def load_sector_data(excel_path):
+    """Load main sectors and their sub-indicator mappings from Excel."""
+    try:
+        excel_file = pd.ExcelFile(excel_path)
+        main_ind_df = excel_file.parse('main_ind')
+        main_options = main_ind_df.set_index('main-index-name')['main-index-code'].to_dict()
+        
+        # Load all sub-indicator sheets into a dictionary
+        sub_options = {}
+        for sheet_name in main_options.values():
+            sub_df = excel_file.parse(sheet_name)
+            sub_options[sheet_name] = sub_df.set_index('index')['index code'].to_dict()
+        
+        return main_options, sub_options
+    except Exception as e:
+        st.error(f"Error loading sector data: {e}")
+        st.stop()
 
 def calculate_national_averages(df, years):
     return {year: df[year].mean() for year in years}
@@ -79,7 +97,8 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     if province_data and province_name:
         fig.add_trace(go.Scatter(
             x=years, y=[province_data[year] for year in years], name=province_name,
-            line=dict(color='#ff7f0e', width=2.5, dash='dash'), mode='lines+markers', marker=dict(size=8, symbol='circle'),
+            line=dict(color='#ff7f0e', width=2.5, dash='dash'), mode='lines+markers', marker=dict(size=8, symbol_;
+='circle'),
             hovertemplate='%{y:.2f}<extra></extra>'
         ))
     fig.update_layout(
@@ -169,29 +188,35 @@ def main():
     geojson_path = os.path.join(os.path.dirname(__file__), 'IRN_adm.json')
 
     # Load cached GeoJSON and mappings
-    gdf, sheet_options, location_dict = load_geojson_and_mappings(geojson_path, excel_path)
+    gdf, location_dict = load_geojson_and_mappings(geojson_path, excel_path)
 
-    # Load Excel file
-    try:
-        excel_file = pd.ExcelFile(excel_path)
-    except Exception as e:
-        st.error(f"Error loading Excel file: {e}")
-        st.stop()
+    # Load sector data (new)
+    main_options, sub_options = load_sector_data(excel_path)
 
     # Sidebar controls
     st.sidebar.header("Dashboard Controls")
-    selected_index_code = st.sidebar.selectbox("Select Indicator:", options=list(sheet_options.keys()),
-                                               format_func=lambda x: f"{x} - {sheet_options[x]}")
-    sheet = sheet_options[selected_index_code]
+    
+    # New dropdown for main sector
+    selected_main_sector = st.sidebar.selectbox("Select Main Sector:", options=list(main_options.keys()))
+    selected_main_code = main_options[selected_main_sector]  # e.g., "Index02"
+
+    # Filter sub-indicators based on selected main sector
+    sub_indicators = sub_options[selected_main_code]  # e.g., {"2-9 - The share...": "Index02-9"}
+    selected_index = st.sidebar.selectbox("Select Indicator:", options=list(sub_indicators.keys()))
+    selected_index_code = sub_indicators[selected_index]  # e.g., "Index02-9"
+
+    # Load data for the selected sub-indicator
     try:
-        df = excel_file.parse(sheet)
+        excel_file = pd.ExcelFile(excel_path)
+        df = excel_file.parse(selected_index_code)  # Load the data sheet (e.g., "Index02-9")
         years = [col for col in df.columns if col.isdigit()]
         if not years:
-            st.error("No numeric year columns found in the selected sheet.")
+            st.error("No numeric year columns found in the selected data sheet.")
             st.stop()
     except Exception as e:
-        st.error(f"Error parsing sheet '{sheet}': {e}")
+        st.error(f"Error parsing data sheet '{selected_index_code}': {e}")
         st.stop()
+
     year = st.sidebar.selectbox("Select Year:", options=years)
     color_options = {'Red': 'Reds', 'Blue': 'Blues', 'Green': 'Greens'}
     selected_color = st.sidebar.selectbox("Select Color Scheme:", options=list(color_options.keys()), index=0)
@@ -201,14 +226,14 @@ def main():
         st.session_state.selected_province_id = None
         st.rerun()
 
-    st.title("Geographic Development Index Dashboard - Education Sector")
+    st.title("Geographic Development Index Dashboard")
     st.markdown(custom_css, unsafe_allow_html=True)
 
     if 'selected_province_id' not in st.session_state:
         st.session_state.selected_province_id = None
 
     with st.spinner("Generating map..."):
-        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
+        m, merged_gdf = create_map(gdf, df, location_dict, selected_index, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             return
