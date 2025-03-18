@@ -85,7 +85,8 @@ def load_sector_data(excel_path):
             if not {'index', 'index code'}.issubset(sub_df.columns):
                 st.error(f"Sheet '{sheet_name}' must have 'index' and 'index code' columns.")
                 st.stop()
-            sub_options[sheet_name] = sub_df.set_index('index')['index code'].to_dict()
+            # Reverse the mapping: 'index code' (descriptive name) to 'index' (sheet name)
+            sub_options[sheet_name] = sub_df.set_index('index code')['index'].to_dict()
 
         return main_options, sub_options
     except Exception as e:
@@ -136,12 +137,10 @@ def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, sel
         st.warning(f"Some provinces lack data for {selected_index} in {year}.")
     try:
         choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
-        # Reproject to a projected CRS (UTM Zone 39N for Iran) before calculating centroid
         merged_gdf = merged_gdf.to_crs('EPSG:32639')
         merged_gdf['centroid'] = merged_gdf.geometry.centroid
         merged_gdf['lat'] = merged_gdf['centroid'].y
         merged_gdf['lon'] = merged_gdf['centroid'].x
-        # Convert back to EPSG:4326 for Folium display
         merged_gdf = merged_gdf.to_crs('EPSG:4326')
     except Exception as e:
         st.error(f"Error processing centroids: {e}")
@@ -205,7 +204,7 @@ def main():
     """Main function to run the Streamlit app."""
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
 
-    # File paths (relative to the app.py location in Streamlit Cloud)
+    # File paths (relative to app.py location in Streamlit Cloud)
     excel_path = 'IrDevIndex2.xlsx'
     geojson_path = 'IRN_adm.json'
 
@@ -232,25 +231,25 @@ def main():
 
     # Filter and select sub-indicator
     sub_indicators = sub_options[selected_main_code]  # e.g., {"2-9 - The share...": "Index02-9"}
-    selected_index = st.sidebar.selectbox("Select Indicator:", options=list(sub_indicators.keys()))
-    selected_index_code = sub_indicators[selected_index]  # e.g., "Index02-9"
+    selected_index_code = st.sidebar.selectbox("Select Indicator:", options=list(sub_indicators.keys()))  # Descriptive name
+    selected_index = sub_indicators[selected_index_code]  # Sheet name, e.g., "Index02-9"
 
-    # Load data for the selected sub-indicator
+    # Load data for the selected sub-indicator using index (sheet name)
     try:
         excel_file = pd.ExcelFile(excel_path)
-        if selected_index_code not in excel_file.sheet_names:
-            st.error(f"Data sheet '{selected_index_code}' not found in Excel file.")
+        if selected_index not in excel_file.sheet_names:
+            st.error(f"Data sheet '{selected_index}' not found in Excel file.")
             st.stop()
-        df = excel_file.parse(selected_index_code)
+        df = excel_file.parse(selected_index)
         if 'ID_1' not in df.columns:
-            st.error(f"Data sheet '{selected_index_code}' must have an 'ID_1' column.")
+            st.error(f"Data sheet '{selected_index}' must have an 'ID_1' column.")
             st.stop()
         years = [col for col in df.columns if col.isdigit()]
         if not years:
-            st.error(f"No numeric year columns found in data sheet '{selected_index_code}'.")
+            st.error(f"No numeric year columns found in data sheet '{selected_index}'.")
             st.stop()
     except Exception as e:
-        st.error(f"Error loading data sheet '{selected_index_code}': {e}")
+        st.error(f"Error loading data sheet '{selected_index}': {e}")
         st.stop()
 
     # Additional controls
@@ -271,7 +270,7 @@ def main():
         st.session_state.selected_province_id = None
 
     with st.spinner("Generating map..."):
-        m, merged_gdf = create_map(gdf, df, location_dict, selected_index, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
+        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             st.stop()
