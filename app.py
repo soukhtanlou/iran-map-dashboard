@@ -10,7 +10,7 @@ from shapely.geometry import Point
 import json
 import os
 
-# Custom CSS for responsive layout (unchanged)
+# Custom CSS for responsive layout
 custom_css = """
 <style>
     body {
@@ -136,9 +136,13 @@ def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, sel
         st.warning(f"Some provinces lack data for {selected_index} in {year}.")
     try:
         choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
+        # Reproject to a projected CRS (UTM Zone 39N for Iran) before calculating centroid
+        merged_gdf = merged_gdf.to_crs('EPSG:32639')
         merged_gdf['centroid'] = merged_gdf.geometry.centroid
         merged_gdf['lat'] = merged_gdf['centroid'].y
         merged_gdf['lon'] = merged_gdf['centroid'].x
+        # Convert back to EPSG:4326 for Folium display
+        merged_gdf = merged_gdf.to_crs('EPSG:4326')
     except Exception as e:
         st.error(f"Error processing centroids: {e}")
         return None, None
@@ -201,9 +205,9 @@ def main():
     """Main function to run the Streamlit app."""
     st.set_page_config(page_title="Geographic Dashboard", layout="wide")
 
-    # File paths
-    excel_path = os.path.join(os.path.dirname(__file__), 'IrDevIndex2.xlsx')
-    geojson_path = os.path.join(os.path.dirname(__file__), 'IRN_adm.json')
+    # File paths (relative to the app.py location in Streamlit Cloud)
+    excel_path = 'IrDevIndex2.xlsx'
+    geojson_path = 'IRN_adm.json'
 
     # Verify file existence
     if not os.path.exists(excel_path):
