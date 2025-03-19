@@ -202,7 +202,7 @@ def find_clicked_province(clicked_location, gdf):
 
 def main():
     """Main function to run the Streamlit app."""
-    st.set_page_config(page_title="Geographic Dashboard", layout="wide")
+    st.set_page_config(page_title="Iran's Development Indicators", layout="wide")
 
     # File paths (relative to app.py location in Streamlit Cloud)
     excel_path = 'IrDevIndex2.xlsx'
@@ -263,7 +263,7 @@ def main():
         st.rerun()
 
     # Main UI
-    st.title("Geographic Development Index Dashboard")
+    st.title("Iran's Atlas of Provincial Development Indicators")
     st.markdown(custom_css, unsafe_allow_html=True)
 
     if 'selected_province_id' not in st.session_state:
