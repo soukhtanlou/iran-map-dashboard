@@ -140,7 +140,7 @@ def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, sel
         merged_gdf['centroid'] = merged_gdf.geometry.centroid
         merged_gdf['lat'] = merged_gdf['centroid'].y
         merged_gdf['lon'] = merged_gdf['centroid'].x
-        merged_gdf = merged_gdf.to_crs('EPGS:4326')
+        merged_gdf = merged_gdf.to_crs('EPSG:4326')  # Corrected typo here
     except Exception as e:
         st.error(f"Error processing centroids: {e}")
         return None, None
@@ -316,10 +316,11 @@ def main():
         st.plotly_chart(fig, use_container_width=True)
 
     # Add data table at the bottom
-    st.subheader(f"Data for {selected_index_code}")
-    table_df = df.merge(pd.DataFrame(list(location_dict.items()), columns=['ID_1', 'NAME_1']), on='ID_1', how='left')
-    table_df = table_df[['NAME_1', 'Prov'] + years]
-    table_df = table_df.rename(columns={'NAME_1': 'Provinces'})
+    st.subheader("Data Table")
+    table_df = df[['ID_1', 'Prov'] + years].copy()
+    table_df['Provinces'] = table_df['ID_1'].map(location_dict)
+    table_df = table_df[['Provinces', 'Prov'] + years]  # Reorder columns
+    table_df = table_df.rename(columns={'NAME_1': 'Provinces'})  # Ensure NAME_1 is renamed
     st.dataframe(table_df, use_container_width=True)
 
 if __name__ == "__main__":
