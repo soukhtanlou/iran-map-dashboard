@@ -125,7 +125,7 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     )
     return fig
 
-def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, selected_color, selected_province_id=None):
+def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, selected_color, selected_index, selected_province_id=None):
     """Create a choropleth map with tooltips and province highlighting."""
     try:
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
@@ -133,7 +133,7 @@ def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, sel
         st.error(f"Error merging GeoDataFrame with data: {e}")
         return None, None
     if merged_gdf[year].isna().any():
-        st.warning(f"Some provinces lack data for {selected_index} in {year}.")
+        st.warning(f"Some provinces lack data for {selected_index_code} in {year}.")
     try:
         choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
         merged_gdf = merged_gdf.to_crs('EPSG:32639')
@@ -151,7 +151,7 @@ def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, sel
             geo_data=choropleth_gdf.to_json(), name='choropleth',
             data=choropleth_gdf, columns=['ID_1', year], key_on='feature.properties.ID_1',
             fill_color=fill_color, fill_opacity=0.8, line_opacity=0.2,
-            legend_name=f'{selected_index} - {year}'
+            legend_name=f'{selected_index_code} - {year}'
         ).add_to(m)
     except Exception as e:
         st.error(f"Error creating choropleth layer: {e}")
@@ -169,7 +169,7 @@ def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, sel
                     geojson_data,
                     style_function=lambda x: no_data_style(x) if pd.isna(x['properties'][year]) else tooltip_style(x),
                     tooltip=folium.GeoJsonTooltip(
-                        fields=['NAME_1', year], aliases=['Province:', f'{selected_index} ({year}):'],
+                        fields=['NAME_1', year], aliases=['Province:', f'{selected_index} ({year}):'],  # Changed to selected_index
                         localize=True, style="background-color: #f0f0f0; color: #004d40; font-family: 'Helvetica', sans-serif; font-size: 14px; padding: 8px; border-radius: 4px; border: 1px solid #004d40;"
                     ),
                     name='Tooltips'
@@ -267,7 +267,6 @@ def main():
 
     # Main UI
     st.title("Iran's Atlas of Provincial Development Indicators")
-    # Add selection summary line
     st.markdown(f"{selected_main_sector} \\ {selected_index_code} \\ {year}")
     st.markdown(custom_css, unsafe_allow_html=True)
 
@@ -275,7 +274,7 @@ def main():
         st.session_state.selected_province_id = None
 
     with st.spinner("Generating map..."):
-        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
+        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], selected_index, st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             st.stop()
