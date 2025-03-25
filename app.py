@@ -9,7 +9,6 @@ import plotly.graph_objects as go
 from shapely.geometry import Point
 import json
 import os
-import base64
 
 # Custom CSS for responsive layout
 custom_css = """
@@ -126,7 +125,7 @@ def create_line_chart(national_averages, province_data=None, province_name=None)
     )
     return fig
 
-def create_map(gdf, df, location_dict, selected_index_code, selected_index, year, reverse_colors, selected_color, selected_province_id=None):
+def create_map(gdf, df, location_dict, selected_index, year, reverse_colors, selected_color, selected_province_id=None):
     """Create a choropleth map with tooltips and province highlighting."""
     try:
         merged_gdf = gdf.merge(df[['ID_1', year]], on='ID_1', how='left')
@@ -134,7 +133,7 @@ def create_map(gdf, df, location_dict, selected_index_code, selected_index, year
         st.error(f"Error merging GeoDataFrame with data: {e}")
         return None, None
     if merged_gdf[year].isna().any():
-        st.warning(f"Some provinces lack data for {selected_index_code} in {year}.")
+        st.warning(f"Some provinces lack data for {selected_index} in {year}.")
     try:
         choropleth_gdf = merged_gdf.drop(columns=['centroid', 'lat', 'lon'], errors='ignore')
         merged_gdf = merged_gdf.to_crs('EPSG:32639')
@@ -152,7 +151,7 @@ def create_map(gdf, df, location_dict, selected_index_code, selected_index, year
             geo_data=choropleth_gdf.to_json(), name='choropleth',
             data=choropleth_gdf, columns=['ID_1', year], key_on='feature.properties.ID_1',
             fill_color=fill_color, fill_opacity=0.8, line_opacity=0.2,
-            legend_name=f'{selected_index_code} - {year}'
+            legend_name=f'{selected_index} - {year}'
         ).add_to(m)
     except Exception as e:
         st.error(f"Error creating choropleth layer: {e}")
@@ -170,10 +169,8 @@ def create_map(gdf, df, location_dict, selected_index_code, selected_index, year
                     geojson_data,
                     style_function=lambda x: no_data_style(x) if pd.isna(x['properties'][year]) else tooltip_style(x),
                     tooltip=folium.GeoJsonTooltip(
-                        fields=['NAME_1', year], 
-                        aliases=['Province:', f'{selected_index}:'],  # Use selected_index instead of selected_index_code
-                        localize=True, 
-                        style="background-color: #f0f0f0; color: #004d40; font-family: 'Helvetica', sans-serif; font-size: 14px; padding: 8px; border-radius: 4px; border: 1px solid #004d40;"
+                        fields=['NAME_1', year], aliases=['Province:', f'{selected_index} ({year}):'],
+                        localize=True, style="background-color: #f0f0f0; color: #004d40; font-family: 'Helvetica', sans-serif; font-size: 14px; padding: 8px; border-radius: 4px; border: 1px solid #004d40;"
                     ),
                     name='Tooltips'
                 ).add_to(m)
@@ -201,12 +198,6 @@ def find_clicked_province(clicked_location, gdf):
         if row['geometry'].contains(click_point):
             return row['ID_1']
     return None
-
-def get_file_download_link(html_content, filename):
-    """Generate a download link for HTML content."""
-    b64 = base64.b64encode(html_content.encode()).decode()  # Encode to base64
-    href = f'<a href="data:text/html;base64,{b64}" download="{filename}">Download Map Snapshot (HTML)</a>'
-    return href
 
 def main():
     """Main function to run the Streamlit app."""
@@ -276,6 +267,7 @@ def main():
 
     # Main UI
     st.title("Iran's Atlas of Provincial Development Indicators")
+    # Add selection summary line
     st.markdown(f"{selected_main_sector} \\ {selected_index_code} \\ {year}")
     st.markdown(custom_css, unsafe_allow_html=True)
 
@@ -283,7 +275,7 @@ def main():
         st.session_state.selected_province_id = None
 
     with st.spinner("Generating map..."):
-        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, selected_index, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
+        m, merged_gdf = create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors, color_options[selected_color], st.session_state.selected_province_id)
         if m is None or merged_gdf is None:
             st.error("Map creation failed. Check logs above for details.")
             st.stop()
@@ -291,12 +283,6 @@ def main():
     st.markdown('<div class="map-frame">', unsafe_allow_html=True)
     map_data = st_folium(m, width='100%', height=600 if st.session_state.get('screen_height', 1080) > 800 else 400)
     st.markdown('</div>', unsafe_allow_html=True)
-
-    # Add snapshot download button
-    if st.button("Save Map Snapshot"):
-        map_html = m._repr_html_()  # Get the HTML representation of the map
-        st.markdown(get_file_download_link(map_html, f"map_snapshot_{selected_index}_{year}.html"), unsafe_allow_html=True)
-        st.info("Click the link above to download the map as an HTML file. Open it in a browser and take a screenshot if needed.")
 
     st.markdown("**Click on a region on the map to display its trend over years in the chart below.**")
 
@@ -333,8 +319,8 @@ def main():
     st.subheader("Data Table")
     table_df = df[['ID_1', 'Prov'] + years].copy()
     table_df['Provinces'] = table_df['ID_1'].map(location_dict)
-    table_df = table_df[['Provinces', 'Prov'] + years]
-    table_df = table_df.rename(columns={'NAME_1': 'Provinces'})
+    table_df = table_df[['Provinces', 'Prov'] + years]  # Reorder columns
+    table_df = table_df.rename(columns={'NAME_1': 'Provinces'})  # Ensure NAME_1 is renamed
     st.dataframe(table_df, use_container_width=True)
 
 if __name__ == "__main__":
