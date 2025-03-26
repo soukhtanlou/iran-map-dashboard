@@ -38,7 +38,7 @@ Developed to support planning and policymaking, particularly for human developme
 
 **Screenshots**
 
-![Dashboard Map](dashboard_map.jpeg) *(Note: Update this with an actual screenshot if available)*
+![Dashboard Map](dashboard_map.jpeg) 
 
 **Visit**
 
