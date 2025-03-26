@@ -200,7 +200,6 @@ def find_clicked_province(clicked_location, gdf):
     return None
 
 def main():
-    """Main function to run the Streamlit app."""
     st.set_page_config(page_title="Iran's Development Indicators", layout="wide")
 
     # File paths (relative to app.py location in Streamlit Cloud)
@@ -263,7 +262,7 @@ def main():
 
     # Add "About" link at the bottom of the sidebar
     st.sidebar.markdown("---")
-    st.sidebar.markdown("[About](https://raw.githubusercontent.com/soukhtanlou/iran-map-dashboard/main/index.html)")
+    st.sidebar.markdown("[About](https://soukhtanlou.github.io/iran-map-dashboard/)")
 
     # Main UI
     st.title("Iran's Atlas of Provincial Development Indicators")
