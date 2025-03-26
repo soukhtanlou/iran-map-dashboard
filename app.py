@@ -263,7 +263,7 @@ def main():
 
     # Add "About" link at the bottom of the sidebar
     st.sidebar.markdown("---")
-    st.sidebar.markdown("[About](https://raw.githubusercontent.com/soukhtanlou/iran-map-dashboard/main/about.html)")
+    st.sidebar.markdown("[About](https://raw.githubusercontent.com/soukhtanlou/iran-map-dashboard/main/index.html)")
 
     # Main UI
     st.title("Iran's Atlas of Provincial Development Indicators")
