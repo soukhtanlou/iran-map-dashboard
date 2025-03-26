@@ -169,7 +169,7 @@ def create_map(gdf, df, location_dict, selected_index_code, year, reverse_colors
                     geojson_data,
                     style_function=lambda x: no_data_style(x) if pd.isna(x['properties'][year]) else tooltip_style(x),
                     tooltip=folium.GeoJsonTooltip(
-                        fields=['NAME_1', year], aliases=['Province:', f'{selected_index} ({year}):'],  # Changed to selected_index
+                        fields=['NAME_1', year], aliases=['Province:', f'{selected_index} ({year}):'],
                         localize=True, style="background-color: #f0f0f0; color: #004d40; font-family: 'Helvetica', sans-serif; font-size: 14px; padding: 8px; border-radius: 4px; border: 1px solid #004d40;"
                     ),
                     name='Tooltips'
@@ -200,6 +200,7 @@ def find_clicked_province(clicked_location, gdf):
     return None
 
 def main():
+    """Main function to run the Streamlit app."""
     st.set_page_config(page_title="Iran's Development Indicators", layout="wide")
 
     # File paths (relative to app.py location in Streamlit Cloud)
@@ -260,9 +261,22 @@ def main():
         st.session_state.selected_province_id = None
         st.rerun()
 
-    # Add "About" link at the bottom of the sidebar
+    # Add "About" section as an expander in the sidebar
     st.sidebar.markdown("---")
-    st.sidebar.markdown("[About](https://soukhtanlou.github.io/iran-map-dashboard/)")
+    with st.sidebar.expander("About"):
+        st.markdown("""
+            ### Preface
+            Statistical data serves as a foundational element for policymaking, planning, guiding executive affairs, and monitoring and evaluating programs. At the governance level, the *Statistical Centre of Iran (SCI)* is tasked with preparing data related to economic, social, and cultural development goals, as well as developing descriptive and analytical indicators and variables at national and regional levels. This information is provided in the form of statistical reports, trend analyses, and thematic datasets, made available as **open-source** resources for researchers, planners, and citizens.
+
+            However, different planning domains each require specific types of analysis and customized statistical reports tailored to their agendas, necessitating the application of analytical and statistical tools or relevant data visualizations within the provided datasets. To this end, the present dashboard, titled *Iran’s Atlas of Provincial Development Indicators*, serves as an analytical and visual tool aimed at providing users with appropriate insights for comparing the level of development across provinces.
+
+            The data is derived from the report *"Economic, Social, and Cultural Status of Provinces"*, encompassing statistical information from **2019 to 2023**. This information is organized under **24 main categories** and their respective sub-indicators. Given the atlas’s objective—namely, to offer a tool for planning and prioritizing policymaking focused on human development in less privileged regions—a selected portion of this data is presented through data visualizations, including dynamic maps for inter-provincial comparisons across different years, line charts for comparing national and provincial trends, and data tables.
+
+            Since the indicators in the report possess qualities such as validity, generalizability, timeliness, reliability, interpretability, and comparability, various modeling approaches can yield analyses for comparing provinces with one another in the context of development goals. For definitions of the statistical indicators used in this dashboard, users are kindly referred to the content of the aforementioned report.
+
+            **With gratitude, Hossein Soukhtanlou**  
+            **Report Link:** [Economic, Social, and Cultural Status of Provinces](https://amar.org.ir/Portals/0/Articles/jayegah.98-1402.pdf)
+        """)
 
     # Main UI
     st.title("Iran's Atlas of Provincial Development Indicators")
