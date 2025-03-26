@@ -19,5 +19,7 @@ These indicators are valid, reliable, timely, interpretable, and comparable, ena
 ## Notes
 For definitions of the statistical indicators used here, please refer to the full report.  
 
-**With gratitude,**  
+**With gratitude,** 
+**Hossein Soukhtanlou**
+
 **Report Link**: [Economic, Social, and Cultural Status of Provinces](https://amar.org.ir/Portals/0/Articles/jayegah.98-1402.pdf)
