@@ -243,9 +243,10 @@ def main():
         if 'ID_1' not in df.columns:
             st.error(f"Data sheet '{selected_index}' must have an 'ID_1' column.")
             st.stop()
-        years = [col for col in df.columns if col.isdigit()]
+        # Convert all column names to strings and filter for years (four-digit numbers)
+        years = [str(col) for col in df.columns if str(col).isdigit() and len(str(col)) == 4]
         if not years:
-            st.error(f"No numeric year columns found in data sheet '{selected_index}'.")
+            st.error(f"No valid year columns (four-digit numbers) found in data sheet '{selected_index}'.")
             st.stop()
     except Exception as e:
         st.error(f"Error loading data sheet '{selected_index}': {e}")
