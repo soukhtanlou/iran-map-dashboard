@@ -271,12 +271,12 @@ def main():
 
             However, different planning domains each require specific types of analysis and customized statistical reports tailored to their agendas, necessitating the application of analytical and statistical tools or relevant data visualizations within the provided datasets. To this end, the present dashboard, titled *Iran’s Atlas of Provincial Development Indicators*, serves as an analytical and visual tool aimed at providing users with appropriate insights for comparing the level of development across provinces.
 
-            The data is derived from the report *"Economic, Social, and Cultural Status of Provinces"*, encompassing statistical information from **2019 to 2023**. This information is organized under **24 main categories** and their respective sub-indicators. Given the atlas’s objective—namely, to offer a tool for planning and prioritizing policymaking focused on human development in less privileged regions—a selected portion of this data is presented through data visualizations, including dynamic maps for inter-provincial comparisons across different years, line charts for comparing national and provincial trends, and data tables.
+            These data have been extracted from five longitudinal reports titled *"Economic, Social, and Cultural Status of Provinces"*,  which include data from the years **2014 to 2023**. Given the changes in definitions and calculation methods of the indices in various reports, the basis of the current atlas is the reference system of the latest report, and the data completion is based on the standard indices with the latest report. This information is organized under **24 main categories** and their respective sub-indicators. Given the atlas’s objective—namely, to offer a tool for planning and prioritizing policymaking focused on human development in less privileged regions—a selected portion of this data is presented through data visualizations, including dynamic maps for inter-provincial comparisons across different years, line charts for comparing national and provincial trends, and data tables.
 
             Since the indicators in the report possess qualities such as validity, generalizability, timeliness, reliability, interpretability, and comparability, various modeling approaches can yield analyses for comparing provinces with one another in the context of development goals. For definitions of the statistical indicators used in this dashboard, users are kindly referred to the content of the aforementioned report.
 
             **With gratitude, Hossein Soukhtanlou**  
-            **Report Link:** [Economic, Social, and Cultural Status of Provinces](https://amar.org.ir/Portals/0/Articles/jayegah.98-1402.pdf)
+            **Reports Link:** [Economic, Social, and Cultural Status of Provinces](https://amar.org.ir/development-indicators#5029327---)
         """)
 
     # Main UI
